@@ -18,7 +18,7 @@ static uint8_t const sha1InitState[] PROGMEM = {
 
 Sha1::Sha1()
 {
-  memcpy_P(state.b, sha1InitState, HASH_LENGTH);
+  memcpy_P(state.b, sha1InitState, HashLength);
   byteCount = 0;
   bufferOffset = 0;
 }
@@ -78,7 +78,7 @@ void Sha1::addUncounted(uint8_t data)
 {
   buffer.b[bufferOffset ^ 3] = data;
   bufferOffset++;
-  if (bufferOffset == BLOCK_LENGTH)
+  if (bufferOffset == BlockLength)
   {
     hashBlock();
     bufferOffset = 0;
