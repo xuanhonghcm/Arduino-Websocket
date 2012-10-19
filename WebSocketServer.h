@@ -69,7 +69,9 @@ http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 #define MAX_FRAME_LENGTH 256
 #endif
 
-#define SIZE(array) (sizeof(array) / sizeof(*array))
+template <typename T, uint16_t N> char (&count_of_helper(T(&)[N]))[N];
+#define SIZE(array) sizeof(count_of_helper(array))
+
 
 class WebSocketServer {
 public:
