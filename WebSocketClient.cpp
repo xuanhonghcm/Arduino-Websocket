@@ -1,11 +1,16 @@
-//#define DEBUGGING
+#define DEBUGGING
 
-#include "global.h"
 #include "WebSocketClient.h"
 
-#include "sha1.h"
+#include "global.h"
+#include <Arduino.h>
+#include <WString.h>
+#include <Client.h>
+//#include <Serial.h>
+#include "Sha1.h"
 #include "base64.h"
 
+using namespace websocket;
 
 bool WebSocketClient::handshake(Client &client) {
 
@@ -67,17 +72,14 @@ bool WebSocketClient::analyzeRequest() {
 
     socket_client->print(F("GET "));
     socket_client->print(path);
-    socket_client->print(F(" HTTP/1.1\r\n"));
-    socket_client->print(F("Upgrade: websocket\r\n"));
-    socket_client->print(F("Connection: Upgrade\r\n"));
-    socket_client->print(F("Host: "));
+    socket_client->print(F(" HTTP/1.1" CRLF
+                           "Upgrade: websocket" CRLF
+                           "Connection: Upgrade" CRLF
+                           "Host: "));
     socket_client->print(host);
-    socket_client->print(CRLF); 
-    socket_client->print(F("Sec-WebSocket-Key: "));
+    socket_client->print(F(CRLF "Sec-WebSocket-Key: "));
     socket_client->print(key);
-    socket_client->print(CRLF);
-    socket_client->print(F("Sec-WebSocket-Version: 13\r\n"));
-    socket_client->print(CRLF);
+    socket_client->print(F(CRLF "Sec-WebSocket-Version: 13" CRLF CRLF));
 
 #ifdef DEBUGGING
     Serial.println(F("Analyzing response headers"));
@@ -85,47 +87,127 @@ bool WebSocketClient::analyzeRequest() {
 
     while (socket_client->connected() && !socket_client->available()) {
         delay(100);
-        Serial.println("Waiting...");
+#ifdef DEBUGGING
+        Serial.print(".");
+#endif
     }
 
-    // TODO: More robust string extraction
-    while ((bite = socket_client->read()) != -1) {
+    enum State
+    {
+        status_line,
+        header_name,
+        header_sep,
+        header_value,
+        end_of_header,
+        end_of_headers
+    };
 
-        temp += (char)bite;
+    State state = status_line;
 
-        if ((char)bite == '\n') {
-#ifdef DEBUGGING
-            Serial.print("Got Header: " + temp);
-#endif
-            if (!foundupgrade && temp.startsWith("Upgrade: websocket")) {
-                foundupgrade = true;
-            } else if (temp.startsWith("Sec-WebSocket-Accept: ")) {
-                serverKey = temp.substring(22,temp.length() - 2); // Don't save last CR+LF
+
+    String headerName;
+    String headerValue;
+
+    while (state != end_of_headers)
+    {
+        bite = socket_client->read();
+        if (bite == -1)
+        {
+            if (!socket_client->connected())
+            {
+                // disconnected
+                break;
             }
-            temp = "";		
+            else
+            {
+                delay(10);
+                continue;
+            }
         }
 
-        if (!socket_client->available()) {
+        switch (state)
+        {
+        case status_line:
+            if ((char)bite == '\n')
+            {
+                state = header_name;
+                headerName = String();
+            }
+            break;
+        case end_of_header:
+            if (bite != '\r')
+            {
+                state = header_name;
+            }
+            break;
+        case header_name:
+            if ((char)bite == '\r' || (char)bite == '\n')
+            {
+                state = end_of_headers;
+            }
+            else if ((char)bite != ':')
+            {
+                headerName += (char)bite;
+            }
+            else
+            {
+                state = header_sep;
+                headerValue = String();
+            }
+            break;
+        case header_sep:
+            if ((char)bite == ' ')
+                break;
+            else
+                state = header_value;
+            // no break
+        case header_value:
+            if (bite != '\r' && bite != '\n')
+            {
+                headerValue += (char)bite;
+            }
+            if (bite == '\r')
+            {
+                if (headerName.equalsIgnoreCase("upgrade")
+                        && headerValue.equalsIgnoreCase("websocket"))
+                {
+                    foundupgrade = true;
+                }
+                else if (headerName.equalsIgnoreCase("sec-websocket-accept"))
+                {
+                    Serial.print(F("accept found"));
+                    Serial.println(headerValue);
+                    serverKey = headerValue;
+                }
+                state = end_of_header;
+                headerName = String();
+            }
+            break;
+
+        }
+
+        if (!socket_client->available())
+        {
           delay(20);
         }
     }
 
-    key += "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-    uint8_t *hash;
-    char result[21];
+    Sha1 sha;
+    sha.update(key);
+    sha.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+
+    uint8_t result[21];
+    sha.finish(result);
+
     char b64Result[30];
+    base64_encode(b64Result, reinterpret_cast<char*>(result), 20);
 
-    Sha1.init();
-    Sha1.print(key);
-    hash = Sha1.result();
-
-    for (int i=0; i<20; ++i) {
-        result[i] = (char)hash[i];
-    }
-    result[20] = '\0';
-
-    base64_encode(b64Result, result, 20);
-
+#ifdef DEBUGGING
+    Serial.print(F("  Server key:"));
+    Serial.println(serverKey);
+    Serial.print(F("I calculated:"));
+    Serial.println(String(b64Result));
+#endif
     // if the keys match, good to go
     return serverKey.equals(String(b64Result));
 }
@@ -173,7 +255,7 @@ String WebSocketClient::handleStream() {
             length |= timedRead();
             if (!socket_client->connected()) {
                 return socketString;
-            }   
+            }
 
         } else if (length == 127) {
 #ifdef DEBUGGING
@@ -260,7 +342,7 @@ void WebSocketClient::sendData(const char *str) {
     }
 }
 
-void WebSocketClient::sendData(String str) {
+void WebSocketClient::sendData(String const& str) {
 #ifdef DEBUGGING
     Serial.print(F("Sending data: "));
     Serial.println(str);

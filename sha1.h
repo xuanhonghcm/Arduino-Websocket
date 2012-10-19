@@ -2,7 +2,7 @@
 #define Sha1_h
 
 #include <inttypes.h>
-#include "Print.h"
+#include <WString.h>
 
 #define HASH_LENGTH 20
 #define BLOCK_LENGTH 64
@@ -16,20 +16,37 @@ union _state {
   uint32_t w[HASH_LENGTH/4];
 };
 
-class Sha1Class : public Print
+class Sha1
 {
   public:
-    void init(void);
-    void initHmac(const uint8_t* secret, int secretLength);
-    uint8_t* result(void);
-    uint8_t* resultHmac(void);
-    virtual size_t write(uint8_t);
-    using Print::write;
+    Sha1();
+    void update(uint8_t const* data, uint16_t len)
+    {
+        for (uint16_t i = 0; i < len; ++i)
+        {
+            write(data[i]);
+        }
+    }
+
+    void update(uint8_t data)
+    {
+        write(data);
+    }
+
+    void update(String const& s)
+    {
+        for (uint16_t i = 0; i < s.length(); ++i)
+        {
+            write(s[i]);
+        }
+    }
+
+    void finish(uint8_t* out);
   private:
+    size_t write(uint8_t data);
     void pad();
     void addUncounted(uint8_t data);
     void hashBlock();
-    uint32_t rol32(uint32_t number, uint8_t bits);
     _buffer buffer;
     uint8_t bufferOffset;
     _state state;
@@ -38,6 +55,5 @@ class Sha1Class : public Print
     uint8_t innerHash[HASH_LENGTH];
     
 };
-extern Sha1Class Sha1;
 
 #endif

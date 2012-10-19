@@ -43,11 +43,6 @@ http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 #ifndef WEBSOCKETCLIENT_H_
 #define WEBSOCKETCLIENT_H_
 
-#include <Arduino.h>
-#include <Stream.h>
-#include "String.h"
-#include "Client.h"
-
 // CRLF characters to terminate lines/handshakes in headers.
 #define CRLF "\r\n"
 
@@ -67,7 +62,10 @@ http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 #define MAX_FRAME_LENGTH 256
 #endif
 
-#define SIZE(array) (sizeof(array) / sizeof(*array))
+class Client;
+class String;
+
+namespace websocket {
 
 class WebSocketClient {
 public:
@@ -81,7 +79,7 @@ public:
 
     // Write data to the stream
     void sendData(const char *str);
-    void sendData(String str);
+    void sendData(String const& str);
 
     char *path;
     char *host;
@@ -107,6 +105,6 @@ private:
     void sendEncodedData(String str);
 };
 
-
+} // namespace websocket
 
 #endif
