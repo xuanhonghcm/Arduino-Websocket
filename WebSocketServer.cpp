@@ -169,31 +169,23 @@ bool WebSocketServer::analyzeRequest(int bufferLength) {
 
         if (!hixie76style && newkey.length() > 0) {
 
+            Sha1 sha;
+            sha.update(newkey);
             // add the magic string
-            newkey += "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+            sha.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 
-            uint8_t *hash;
-            char result[21];
+            uint8_t result[21];
+            sha.finish(result);
+
             char b64Result[30];
+            base64_encode(b64Result, reinterpret_cast<char*>(result), 20);
 
-            Sha1.init();
-            Sha1.print(newkey);
-            hash = Sha1.result();
-
-            for (int i=0; i<20; ++i) {
-                result[i] = (char)hash[i];
-            }
-            result[20] = '\0';
-
-            base64_encode(b64Result, result, 20);
-
-            socket_client->print(F("HTTP/1.1 101 Web Socket Protocol Handshake\r\n"));
-            socket_client->print(F("Upgrade: websocket\r\n"));
-            socket_client->print(F("Connection: Upgrade\r\n"));
-            socket_client->print(F("Sec-WebSocket-Accept: "));
+            socket_client->print(F("HTTP/1.1 101 Web Socket Protocol Handshake" CRLF
+                                   "Upgrade: websocket" CRLF
+                                   "Connection: Upgrade" CRLF
+                                   "Sec-WebSocket-Accept: "));
             socket_client->print(b64Result);
-            socket_client->print(CRLF);
-            socket_client->print(CRLF);
+            socket_client->print(CRLF CRLF);
 
             return true;
         } else {
