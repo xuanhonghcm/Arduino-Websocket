@@ -70,6 +70,24 @@ namespace websocket {
 class WebSocketClient {
 public:
 
+    enum Opcode
+    {
+        Opcode_Continuation = 0x00,
+        Opcode_Text         = 0x01,
+        Opcode_Binary       = 0x02,
+        Opcode_Close        = 0x08,
+        Opcode_Ping         = 0x09,
+        Opcode_Pong         = 0x0A,
+    };
+
+    enum Flag
+    {
+        Flag_Fin = 0x80,
+        Flag_Rsv1 = 0x40,
+        Flag_Rsv2 = 0x20,
+        Flag_Rsv3 = 0x10,
+    };
+
     // Handle connection requests to validate and process/refuse
     // connections.
     bool handshake(Client &client);
@@ -78,7 +96,7 @@ public:
     String getData();
 
     // Write data to the stream
-    void sendData(const char *str);
+    void sendData(char const* str, Opcode = Opcode_Text);
     void sendData(String const& str);
 
     char *path;
@@ -92,17 +110,17 @@ private:
 
     // Discovers if the client's header is requesting an upgrade to a
     // websocket connection.
-    bool analyzeRequest();
+    bool analyzeResponse();
 
-    String handleStream();    
-    
+    String handleStream();
+
     // Disconnect user gracefully.
     void disconnectStream();
     
     int timedRead();
 
-    void sendEncodedData(char *str);
-    void sendEncodedData(String str);
+    void sendEncodedData(char const* str, Opcode opcode);
+    void sendEncodedData(String const& str);
 };
 
 } // namespace websocket

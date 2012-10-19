@@ -22,7 +22,7 @@ bool WebSocketClient::handshake(Client &client) {
 #ifdef DEBUGGING
             Serial.println(F("Client connected"));
 #endif
-        if (analyzeRequest()) {
+        if (analyzeResponse()) {
 #ifdef DEBUGGING
                 Serial.println(F("Websocket established"));
 #endif
@@ -43,7 +43,7 @@ bool WebSocketClient::handshake(Client &client) {
     }
 }
 
-bool WebSocketClient::analyzeRequest() {
+bool WebSocketClient::analyzeResponse() {
     String temp;
 
     int bite;
@@ -316,8 +316,8 @@ void WebSocketClient::disconnectStream() {
     Serial.println(F("Terminating socket"));
 #endif
     // Should send 0x8700 to server to tell it I'm quitting here.
-    socket_client->write((uint8_t) 0x87);
-    socket_client->write((uint8_t) 0x00);
+    socket_client->write((uint8_t) 0x87); // Flag_Fin | Opcode_? Close?
+    socket_client->write((uint8_t) 0x00); // no masking, zero length
     
     socket_client->flush();
     delay(10);
@@ -332,22 +332,26 @@ String WebSocketClient::getData() {
     return data;
 }
 
-void WebSocketClient::sendData(const char *str) {
+void WebSocketClient::sendData(char const* str, Opcode opcode)
+{
 #ifdef DEBUGGING
     Serial.print(F("Sending data: "));
     Serial.println(str);
 #endif
-    if (socket_client->connected()) {
-        sendEncodedData(str);       
+    if (socket_client->connected())
+    {
+        sendEncodedData(str, opcode);
     }
 }
 
-void WebSocketClient::sendData(String const& str) {
+void WebSocketClient::sendData(String const& str)
+{
 #ifdef DEBUGGING
     Serial.print(F("Sending data: "));
     Serial.println(str);
 #endif
-    if (socket_client->connected()) {
+    if (socket_client->connected())
+    {
         sendEncodedData(str);
     }
 }
@@ -360,11 +364,12 @@ int WebSocketClient::timedRead() {
   return socket_client->read();
 }
 
-void WebSocketClient::sendEncodedData(char *str) {
-    int size = strlen(str);
+void WebSocketClient::sendEncodedData(char const* str, Opcode opcode)
+{
+    int const size = strlen(str);
 
     // string type
-    socket_client->write(0x81);
+    socket_client->write(uint8_t(Flag_Fin | opcode));
 
     // NOTE: no support for > 16-bit sized messages
     if (size > 125) {
@@ -380,11 +385,11 @@ void WebSocketClient::sendEncodedData(char *str) {
     }
 }
 
-void WebSocketClient::sendEncodedData(String str) {
-    int size = str.length() + 1;
-    char cstr[size];
+void WebSocketClient::sendEncodedData(String const& str)
+{
+    // XXX: String should have c_str() or similar member.
+    struct X : String { char const* c_str() const { return buffer; } };
 
-    str.toCharArray(cstr, size);
-
-    sendEncodedData(cstr);
+    char const* s = static_cast<X const&>(str).c_str();
+    sendEncodedData(s, Opcode_Text);
 }
