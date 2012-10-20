@@ -2,7 +2,6 @@
 
 #include "WebSocketClient.h"
 
-#include "global.h"
 #include <Arduino.h>
 #include <WString.h>
 #include <Client.h>
@@ -44,15 +43,9 @@ bool WebSocketClient::handshake(Client &client) {
 }
 
 bool WebSocketClient::analyzeResponse() {
-    String temp;
 
-    int bite;
-    bool foundupgrade = false;
-    unsigned long intkey[2];
-    String serverKey;
     char keyStart[17];
-    char b64Key[25];
-    String key = "------------------------";
+    char b64Key[25] = {0};
 
     randomSeed(analogRead(0));
 
@@ -61,10 +54,6 @@ bool WebSocketClient::analyzeResponse() {
     }
 
     base64_encode(b64Key, keyStart, 16);
-
-    for (int i=0; i<24; ++i) {
-        key[i] = b64Key[i];
-    }
 
 #ifdef DEBUGGING
     Serial.println(F("Sending websocket upgrade headers"));
@@ -78,7 +67,7 @@ bool WebSocketClient::analyzeResponse() {
                            "Host: "));
     socket_client->print(host);
     socket_client->print(F(CRLF "Sec-WebSocket-Key: "));
-    socket_client->print(key);
+    socket_client->print(b64Key);
     socket_client->print(F(CRLF "Sec-WebSocket-Version: 13" CRLF CRLF));
 
 #ifdef DEBUGGING
@@ -107,10 +96,11 @@ bool WebSocketClient::analyzeResponse() {
 
     String headerName;
     String headerValue;
-
+    String serverKey;
+    bool foundupgrade = false;
     while (state != end_of_headers)
     {
-        bite = socket_client->read();
+        int bite = socket_client->read();
         if (bite == -1)
         {
             if (!socket_client->connected())
@@ -193,7 +183,7 @@ bool WebSocketClient::analyzeResponse() {
     }
 
     Sha1 sha;
-    sha.update(key);
+    sha.update(b64Key);
     sha.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 
     uint8_t result[21];
@@ -324,12 +314,9 @@ void WebSocketClient::disconnectStream() {
     socket_client->stop();
 }
 
-String WebSocketClient::getData() {
-    String data;
-
-    data = handleStream();
-
-    return data;
+String WebSocketClient::getData()
+{
+    return handleStream();
 }
 
 void WebSocketClient::sendData(char const* str, Opcode opcode)
