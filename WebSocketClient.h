@@ -114,8 +114,8 @@ public:
     bool handshake(Client &client);
     
     // Get data off of the stream
-    String getData();
-    Result readFrame(uint8_t *buffer, uint8_t bufferSize);
+    Result getData(uint8_t* buffer, uint8_t bufferSize);
+    Result readFrame(uint8_t *buffer, uint8_t bufferSize, uint8_t& frameSize);
 
     // Write data to the stream
     void sendData(char const* str, Opcode = Opcode_Text);

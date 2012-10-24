@@ -203,7 +203,7 @@ bool WebSocketClient::analyzeResponse() {
 }
 
 
-WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t bufferSize)
+WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t bufferSize, uint8_t& frameSize)
 {
     if (socket_client == NULL)
         return Error_InvalidState;
@@ -219,22 +219,32 @@ WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t buff
     int const mask_length = timedRead();
     if (!socket_client->connected()) return Error_Disconnected;
     bool const hasMask = (mask_length & 0x80) == 0x80;
-    int length = mask_length & 0x7f;
+    switch (mask_length & 0x7F)
+    {
+    default:
+        frameSize = mask_length & 0x7F;
+        break;
 
-    if (length == 126)
-    {
-        length = timedRead() << 8;
-        if (!socket_client->connected()) return Error_Disconnected;
-            
-        length |= timedRead();
-        if (!socket_client->connected()) return Error_Disconnected;
-    }
-    else if (length == 127)
-    {
-#ifdef DEBUGGING
-            Serial.println(F("No support for over 16 bit sized messages"));
-#endif
+    case 126:
+        {
+            // Following 2 bytes are payload length
+            uint16_t length = timedRead() << 8;
+            if (!socket_client->connected()) return Error_Disconnected;
+
+            length |= timedRead();
+            if (!socket_client->connected()) return Error_Disconnected;
+            if (length > 0xff) return Error_FrameTooBig;
+            frameSize = length;
+        }
+        break;
+
+    case 127:
+        {
+            // Following 8 bytes are payload length
+            uint64_t x;
             return Error_FrameTooBig;
+        }
+        break;
     }
 
     uint8_t mask[4] = {0};
@@ -248,10 +258,10 @@ WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t buff
         }
     }
 
-    if (bufferSize < length)
+    if (bufferSize < frameSize)
         return Error_InsufficientBuffer;
 
-    for (int i = 0; i < length; ++i)
+    for (int i = 0; i < frameSize; ++i)
     {
         buffer[i] = timedRead() ^ mask[i % 4];
         if (!socket_client->connected()) return Error_Disconnected;
@@ -273,10 +283,25 @@ void WebSocketClient::disconnectStream() {
     socket_client->stop();
 }
 
-//String WebSocketClient::getData()
-//{
-//    return readFrame();
-//}
+WebSocketClient::Result WebSocketClient::getData(uint8_t* buffer, uint8_t bufferSize)
+{
+    // Read frames until error or final frame is received.
+    while (true)
+    {
+        uint8_t frameSize;
+        switch (Result const r = readFrame(buffer, bufferSize, frameSize))
+        {
+        default:
+            socket_client->flush();
+            return r;
+
+        case Success_MoreFrames:
+            buffer += frameSize;
+            bufferSize -= frameSize;
+            break;
+        }
+    }
+}
 
 void WebSocketClient::sendData(char const* str, Opcode opcode)
 {
