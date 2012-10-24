@@ -213,7 +213,7 @@ WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t buff
 
     uint8_t const msgtype = timedRead();
     if (!socket_client->connected()) return Error_Disconnected;
-    if (msgtype & 0x80) Serial.println(F("Final frame"));
+    bool const finalFrame = (msgtype & 0x80) == 0x80;
     Serial.print(F("Opcode: ")); Serial.println(msgtype & 0x0F);
 
     int const mask_length = timedRead();
@@ -257,7 +257,7 @@ WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t buff
         if (!socket_client->connected()) return Error_Disconnected;
     }
 
-    return Success_Ok;
+    return finalFrame ? Success_Ok : Success_MoreFrames;
 }
 
 void WebSocketClient::disconnectStream() {
