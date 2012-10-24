@@ -203,102 +203,61 @@ bool WebSocketClient::analyzeResponse() {
 }
 
 
-String WebSocketClient::readFrame() {
-    uint8_t msgtype;
-    uint8_t bite;
-    unsigned int length;
-    uint8_t mask[4];
-    uint8_t index;
-    unsigned int i;
-    bool hasMask = false;
+WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t bufferSize)
+{
+    if (socket_client == NULL)
+        return Error_InvalidState;
 
-    // String to hold bytes sent by server to client
-    String socketString;
+    if (!socket_client->connected())
+        return Error_NotConnected;
 
-    if (socket_client->connected() && socket_client->available()) {
+    uint8_t const msgtype = timedRead();
+    if (!socket_client->connected()) return Error_Disconnected;
+    if (msgtype & 0x80) Serial.println(F("Final frame"));
+    Serial.print(F("Opcode: ")); Serial.println(msgtype & 0x0F);
 
-        msgtype = timedRead();
-        if (!socket_client->connected()) {
-            return socketString;
-        }
+    int const mask_length = timedRead();
+    if (!socket_client->connected()) return Error_Disconnected;
+    bool const hasMask = (mask_length & 0x80) == 0x80;
+    int length = mask_length & 0x7f;
 
-        length = timedRead();
-
-        if (length > 127) {
-            hasMask = true;
-            length = length & 127;
-        }
-
-
-        if (!socket_client->connected()) {
-            return socketString;
-        }
-
-        index = 6;
-
-        if (length == 126) {
-            length = timedRead() << 8;
-            if (!socket_client->connected()) {
-                return socketString;
-            }
+    if (length == 126)
+    {
+        length = timedRead() << 8;
+        if (!socket_client->connected()) return Error_Disconnected;
             
-            length |= timedRead();
-            if (!socket_client->connected()) {
-                return socketString;
-            }
-
-        } else if (length == 127) {
+        length |= timedRead();
+        if (!socket_client->connected()) return Error_Disconnected;
+    }
+    else if (length == 127)
+    {
 #ifdef DEBUGGING
             Serial.println(F("No support for over 16 bit sized messages"));
 #endif
-            while(1) {
-                // halt, can't handle this case
-            }
-        }
-
-        if (hasMask) {
-            // get the mask
-            mask[0] = timedRead();
-            if (!socket_client->connected()) {
-                return socketString;
-            }
-
-            mask[1] = timedRead();
-            if (!socket_client->connected()) {
-
-                return socketString;
-            }
-
-            mask[2] = timedRead();
-            if (!socket_client->connected()) {
-                return socketString;
-            }
-
-            mask[3] = timedRead();
-            if (!socket_client->connected()) {
-                return socketString;
-            }
-        }
-
-        if (hasMask) {
-            for (i=0; i<length; ++i) {
-                socketString += (char) (timedRead() ^ mask[i % 4]);
-                if (!socket_client->connected()) {
-                    return socketString;
-                }
-            }
-        } else {
-            for (i=0; i<length; ++i) {
-                socketString += (char) timedRead();
-                if (!socket_client->connected()) {
-                    return socketString;
-                }
-            }            
-        }
-
+            return Error_FrameTooBig;
     }
 
-    return socketString;
+    uint8_t mask[4] = {0};
+    if (hasMask)
+    {
+        // get the mask
+        for (int i = 0; i < 4; ++i)
+        {
+            mask[i] = timedRead();
+            if (!socket_client->connected()) return Error_Disconnected;
+        }
+    }
+
+    if (bufferSize < length)
+        return Error_InsufficientBuffer;
+
+    for (int i = 0; i < length; ++i)
+    {
+        buffer[i] = timedRead() ^ mask[i % 4];
+        if (!socket_client->connected()) return Error_Disconnected;
+    }
+
+    return Success_Ok;
 }
 
 void WebSocketClient::disconnectStream() {
@@ -314,10 +273,10 @@ void WebSocketClient::disconnectStream() {
     socket_client->stop();
 }
 
-String WebSocketClient::getData()
-{
-    return readFrame();
-}
+//String WebSocketClient::getData()
+//{
+//    return readFrame();
+//}
 
 void WebSocketClient::sendData(char const* str, Opcode opcode)
 {

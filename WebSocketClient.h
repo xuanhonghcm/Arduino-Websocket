@@ -43,6 +43,8 @@ http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 #ifndef WEBSOCKETCLIENT_H_
 #define WEBSOCKETCLIENT_H_
 
+#include <stdint.h>
+
 // CRLF characters to terminate lines/handshakes in headers.
 #define CRLF "\r\n"
 
@@ -67,25 +69,44 @@ class String;
 
 namespace websocket {
 
+enum Opcode
+{
+    Opcode_Continuation = 0x00,
+    Opcode_Text         = 0x01,
+    Opcode_Binary       = 0x02,
+    Opcode_Close        = 0x08,
+    Opcode_Ping         = 0x09,
+    Opcode_Pong         = 0x0A,
+};
+
+enum Flag
+{
+    Flag_Fin = 0x80,
+    Flag_Rsv1 = 0x40,
+    Flag_Rsv2 = 0x20,
+    Flag_Rsv3 = 0x10,
+};
+
 class WebSocketClient {
 public:
 
-    enum Opcode
-    {
-        Opcode_Continuation = 0x00,
-        Opcode_Text         = 0x01,
-        Opcode_Binary       = 0x02,
-        Opcode_Close        = 0x08,
-        Opcode_Ping         = 0x09,
-        Opcode_Pong         = 0x0A,
-    };
 
-    enum Flag
+    enum Result
     {
-        Flag_Fin = 0x80,
-        Flag_Rsv1 = 0x40,
-        Flag_Rsv2 = 0x20,
-        Flag_Rsv3 = 0x10,
+        Success_Ok,
+        Success_MoreFrames,
+        /// Returned when WebSocketClient is ni invalid state for the operation.
+        Error_InvalidState,
+        /// Returned when socket_client is not connected when operation requires connection.
+        Error_NotConnected,
+        /// Returned when connection is closed during operation.
+        Error_Disconnected,
+        /// Returned when frame received from server is larger than this lib can handle.
+        Error_FrameTooBig,
+        /// Returned when provided buffer is not sufficient.
+        Error_InsufficientBuffer,
+        /// Returned when operation times out.
+        Error_Timeout
     };
 
     // Handle connection requests to validate and process/refuse
@@ -94,6 +115,7 @@ public:
     
     // Get data off of the stream
     String getData();
+    Result readFrame(uint8_t *buffer, uint8_t bufferSize);
 
     // Write data to the stream
     void sendData(char const* str, Opcode = Opcode_Text);
@@ -112,7 +134,6 @@ private:
     // websocket connection.
     bool analyzeResponse();
 
-    String handleStream();
 
     // Disconnect user gracefully.
     void disconnectStream();
