@@ -203,7 +203,7 @@ bool WebSocketClient::analyzeResponse() {
 }
 
 
-String WebSocketClient::handleStream() {
+String WebSocketClient::readFrame() {
     uint8_t msgtype;
     uint8_t bite;
     unsigned int length;
@@ -316,7 +316,7 @@ void WebSocketClient::disconnectStream() {
 
 String WebSocketClient::getData()
 {
-    return handleStream();
+    return readFrame();
 }
 
 void WebSocketClient::sendData(char const* str, Opcode opcode)
