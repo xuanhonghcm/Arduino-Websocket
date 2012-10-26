@@ -32,11 +32,8 @@ THE SOFTWARE.
 
 -------------
 Now based off
-http://www.whatwg.org/specs/web-socket-protocol/
+http://tools.ietf.org/html/rfc6455
 
-- OLD -
-Currently based off of "The Web Socket protocol" draft (v 75):
-http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 */
 
 
@@ -48,26 +45,16 @@ http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 // CRLF characters to terminate lines/handshakes in headers.
 #define CRLF "\r\n"
 
-// Amount of time (in ms) a user may be connected before getting disconnected 
-// for timing out (i.e. not sending any data to the server).
-#define TIMEOUT_IN_MS 10000
-
-// ACTION_SPACE is how many actions are allowed in a program. Defaults to 
-// 5 unless overwritten by user.
-#ifndef CALLBACK_FUNCTIONS
-#define CALLBACK_FUNCTIONS 1
-#endif
-
-// Don't allow the client to send big frames of data. This will flood the Arduinos
-// memory and might even crash it.
-#ifndef MAX_FRAME_LENGTH
-#define MAX_FRAME_LENGTH 256
-#endif
-
 class Client;
 class String;
 
 namespace websocket {
+
+template <typename T, unsigned count>
+char (&countof_impl(T(&)[count]))[count];
+
+#define countof(x) (sizeof(::websocket::countof_impl(x)))
+
 
 enum Opcode
 {
@@ -87,32 +74,56 @@ enum Flag
     Flag_Rsv3 = 0x10,
 };
 
-class WebSocketClient {
+enum Result
+{
+    Success_Ok,
+    Success_MoreFrames,
+    /// Returned when WebSocketClient is ni invalid state for the operation.
+    Error_InvalidState,
+    /// Returned when socket_client is not connected when operation requires connection.
+    Error_NotConnected,
+    /// Returned when connection is closed during operation.
+    Error_Disconnected,
+    /// Returned when frame received from server is larger than this lib can handle.
+    Error_FrameTooBig,
+    /// Returned when provided buffer is not sufficient.
+    Error_InsufficientBuffer,
+    /// Returned when operation times out.
+    Error_Timeout,
+    /// Server returned invalid value to handshake
+    Error_BadHandshake
+
+};
+
+typedef ::Client Socket;
+
+class ClientHandshake
+{
 public:
 
+    ClientHandshake(Socket& socket, char const* host, char const* path);
 
-    enum Result
-    {
-        Success_Ok,
-        Success_MoreFrames,
-        /// Returned when WebSocketClient is ni invalid state for the operation.
-        Error_InvalidState,
-        /// Returned when socket_client is not connected when operation requires connection.
-        Error_NotConnected,
-        /// Returned when connection is closed during operation.
-        Error_Disconnected,
-        /// Returned when frame received from server is larger than this lib can handle.
-        Error_FrameTooBig,
-        /// Returned when provided buffer is not sufficient.
-        Error_InsufficientBuffer,
-        /// Returned when operation times out.
-        Error_Timeout
-    };
+    Result run();
 
-    // Handle connection requests to validate and process/refuse
-    // connections.
-    bool handshake(Client &client);
-    
+private:
+
+    /// Performs the handshake.
+    Result analyzeResponse();
+
+    /// Sends "close" frame to server and closes the socket.
+    void disconnect();
+
+    Socket& socket_;
+    char const* const path_;
+    char const* const host_;
+};
+
+class WebSocket
+{
+public:
+
+    explicit WebSocket(Socket& socket, uint8_t maxFrameSize = 64);
+
     // Get data off of the stream
     Result getData(uint8_t* buffer, uint8_t bufferSize);
     Result readFrame(uint8_t *buffer, uint8_t bufferSize, uint8_t& frameSize);
@@ -121,23 +132,11 @@ public:
     void sendData(char const* str, Opcode = Opcode_Text);
     void sendData(String const& str);
 
-    char *path;
-    char *host;
-
 private:
-    Client *socket_client;
-    unsigned long _startMillis;
 
-    const char *socket_urlPrefix;
+    Socket& socket_;
+    uint8_t const maxFrameSize_;
 
-    // Discovers if the client's header is requesting an upgrade to a
-    // websocket connection.
-    bool analyzeResponse();
-
-
-    // Disconnect user gracefully.
-    void disconnectStream();
-    
     int timedRead();
 
     void sendEncodedData(char const* str, Opcode opcode);

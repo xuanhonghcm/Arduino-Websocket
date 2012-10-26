@@ -1,4 +1,4 @@
-#define DEBUGGING
+//#define DEBUGGING
 
 #include "WebSocketClient.h"
 
@@ -11,70 +11,80 @@
 
 using namespace websocket;
 
-bool WebSocketClient::handshake(Client &client) {
+ClientHandshake::ClientHandshake(Socket& socket, char const* host, char const* path)
+    : socket_(socket)
+    , host_(host)
+    , path_(path)
+{ }
 
-    socket_client = &client;
-
-    // If there is a connected client->
-    if (socket_client->connected()) {
-        // Check request and look for websocket handshake
+Result ClientHandshake::run()
+{
+    // Check request and look for websocket handshake
+    Result const res = analyzeResponse();
+    if (res != Success_Ok)
+    {
+        // Might just need to break until out of socket_client loop.
 #ifdef DEBUGGING
-            Serial.println(F("Client connected"));
+        Serial.print(F("Invalid handshake: "));
+        Serial.println(res);
 #endif
-        if (analyzeResponse()) {
-#ifdef DEBUGGING
-                Serial.println(F("Websocket established"));
-#endif
-
-                return true;
-
-        } else {
-            // Might just need to break until out of socket_client loop.
-#ifdef DEBUGGING
-            Serial.println(F("Invalid handshake"));
-#endif
-            disconnectStream();
-
-            return false;
-        }
-    } else {
-        return false;
+        disconnect();
     }
+    else
+    {
+#ifdef DEBUGGING
+        Serial.println("Websocket established");
+#endif
+    }
+
+    return res;
 }
 
-bool WebSocketClient::analyzeResponse() {
-
-    char keyStart[17];
-    char b64Key[25] = {0};
-
-    randomSeed(analogRead(0));
-
-    for (int i=0; i<16; ++i) {
-        keyStart[i] = (char)random(1, 256);
+Result ClientHandshake::analyzeResponse()
+{
+    if (!socket_.connected())
+    {
+        return Error_NotConnected;
     }
 
-    base64_encode(b64Key, keyStart, 16);
+    static bool seeded = false;
+    if (!seeded)
+    {
+        randomSeed(analogRead(0));
+        seeded = true;
+    }
+
+    uint8_t const keySize = 16;
+    long keyStart[keySize/sizeof(long)+1] = {0};
+    for (int i = 0; i < countof(keyStart); ++i)
+    {
+        keyStart[i] = random();
+    }
+
+    char b64Key[32] = {0};
+    base64_encode(b64Key, reinterpret_cast<char*>(keyStart), keySize);
 
 #ifdef DEBUGGING
     Serial.println(F("Sending websocket upgrade headers"));
 #endif    
 
-    socket_client->print(F("GET "));
-    socket_client->print(path);
-    socket_client->print(F(" HTTP/1.1" CRLF
-                           "Upgrade: websocket" CRLF
-                           "Connection: Upgrade" CRLF
-                           "Host: "));
-    socket_client->print(host);
-    socket_client->print(F(CRLF "Sec-WebSocket-Key: "));
-    socket_client->print(b64Key);
-    socket_client->print(F(CRLF "Sec-WebSocket-Version: 13" CRLF CRLF));
+    socket_.print(F("GET "));
+    socket_.print(path_);
+    socket_.print(F(" HTTP/1.1" CRLF
+                    "Upgrade: websocket" CRLF
+                    "Connection: Upgrade" CRLF
+                    "Host: "));
+    socket_.print(host_);
+    socket_.print(F(CRLF "Sec-WebSocket-Key: "));
+    socket_.print(b64Key);
+    socket_.print(F(CRLF "Sec-WebSocket-Version: 13" CRLF CRLF));
 
 #ifdef DEBUGGING
     Serial.println(F("Analyzing response headers"));
 #endif    
 
-    while (socket_client->connected() && !socket_client->available()) {
+    while (socket_.connected() && !socket_.available())
+    {
         delay(100);
 #ifdef DEBUGGING
         Serial.print(".");
@@ -100,13 +110,12 @@ bool WebSocketClient::analyzeResponse() {
     bool foundupgrade = false;
     while (state != end_of_headers)
     {
-        int bite = socket_client->read();
+        int bite = socket_.read();
         if (bite == -1)
         {
-            if (!socket_client->connected())
+            if (!socket_.connected())
             {
-                // disconnected
-                break;
+                return Error_Disconnected;
             }
             else
             {
@@ -165,8 +174,10 @@ bool WebSocketClient::analyzeResponse() {
                 }
                 else if (headerName.equalsIgnoreCase("sec-websocket-accept"))
                 {
+#ifdef DEBUGGING
                     Serial.print(F("accept found"));
                     Serial.println(headerValue);
+#endif
                     serverKey = headerValue;
                 }
                 state = end_of_header;
@@ -176,7 +187,7 @@ bool WebSocketClient::analyzeResponse() {
 
         }
 
-        if (!socket_client->available())
+        if (!socket_.available())
         {
           delay(20);
         }
@@ -199,25 +210,47 @@ bool WebSocketClient::analyzeResponse() {
     Serial.println(String(b64Result));
 #endif
     // if the keys match, good to go
-    return serverKey.equals(String(b64Result));
+    return serverKey.equals(String(b64Result))
+        ? Success_Ok
+        : Error_BadHandshake;
 }
 
-
-WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t bufferSize, uint8_t& frameSize)
+void ClientHandshake::disconnect()
 {
-    if (socket_client == NULL)
-        return Error_InvalidState;
+#ifdef DEBUGGING
+    Serial.println(F("Terminating socket"));
+#endif
+    if (socket_.connected())
+    {
+        // Should send 0x8700 to server to tell it I'm quitting here.
+        uint8_t const msg[] = { 0x87, 0x00 }; // Flag_Fin | Opcode_? Close?
+                                              // no masking, zero length
+        socket_.write(msg, 2);
+        socket_.flush();
+        delay(10);
+        socket_.stop();
+    }
+}
 
-    if (!socket_client->connected())
+WebSocket::WebSocket(Socket& socket, uint8_t maxFrameSize)
+    : socket_(socket)
+    , maxFrameSize_(maxFrameSize)
+{ }
+
+Result WebSocket::readFrame(uint8_t* buffer, uint8_t bufferSize, uint8_t& frameSize)
+{
+    if (!socket_.connected())
         return Error_NotConnected;
 
     uint8_t const msgtype = timedRead();
-    if (!socket_client->connected()) return Error_Disconnected;
+    if (!socket_.connected()) return Error_Disconnected;
     bool const finalFrame = (msgtype & 0x80) == 0x80;
+#ifdef DEBUGGING
     Serial.print(F("Opcode: ")); Serial.println(msgtype & 0x0F);
+#endif
 
     int const mask_length = timedRead();
-    if (!socket_client->connected()) return Error_Disconnected;
+    if (!socket_.connected()) return Error_Disconnected;
     bool const hasMask = (mask_length & 0x80) == 0x80;
     switch (mask_length & 0x7F)
     {
@@ -229,11 +262,11 @@ WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t buff
         {
             // Following 2 bytes are payload length
             uint16_t length = timedRead() << 8;
-            if (!socket_client->connected()) return Error_Disconnected;
+            if (!socket_.connected()) return Error_Disconnected;
 
             length |= timedRead();
-            if (!socket_client->connected()) return Error_Disconnected;
-            if (length > 0xff) return Error_FrameTooBig;
+            if (!socket_.connected()) return Error_Disconnected;
+            if (length > maxFrameSize_) return Error_FrameTooBig;
             frameSize = length;
         }
         break;
@@ -254,7 +287,7 @@ WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t buff
         for (int i = 0; i < 4; ++i)
         {
             mask[i] = timedRead();
-            if (!socket_client->connected()) return Error_Disconnected;
+            if (!socket_.connected()) return Error_Disconnected;
         }
     }
 
@@ -264,26 +297,13 @@ WebSocketClient::Result WebSocketClient::readFrame(uint8_t* buffer, uint8_t buff
     for (int i = 0; i < frameSize; ++i)
     {
         buffer[i] = timedRead() ^ mask[i % 4];
-        if (!socket_client->connected()) return Error_Disconnected;
+        if (!socket_.connected()) return Error_Disconnected;
     }
 
     return finalFrame ? Success_Ok : Success_MoreFrames;
 }
 
-void WebSocketClient::disconnectStream() {
-#ifdef DEBUGGING
-    Serial.println(F("Terminating socket"));
-#endif
-    // Should send 0x8700 to server to tell it I'm quitting here.
-    socket_client->write((uint8_t) 0x87); // Flag_Fin | Opcode_? Close?
-    socket_client->write((uint8_t) 0x00); // no masking, zero length
-    
-    socket_client->flush();
-    delay(10);
-    socket_client->stop();
-}
-
-WebSocketClient::Result WebSocketClient::getData(uint8_t* buffer, uint8_t bufferSize)
+Result WebSocket::getData(uint8_t* buffer, uint8_t bufferSize)
 {
     // Read frames until error or final frame is received.
     while (true)
@@ -292,7 +312,7 @@ WebSocketClient::Result WebSocketClient::getData(uint8_t* buffer, uint8_t buffer
         switch (Result const r = readFrame(buffer, bufferSize, frameSize))
         {
         default:
-            socket_client->flush();
+            socket_.flush();
             return r;
 
         case Success_MoreFrames:
@@ -303,60 +323,65 @@ WebSocketClient::Result WebSocketClient::getData(uint8_t* buffer, uint8_t buffer
     }
 }
 
-void WebSocketClient::sendData(char const* str, Opcode opcode)
+void WebSocket::sendData(char const* str, Opcode opcode)
 {
 #ifdef DEBUGGING
     Serial.print(F("Sending data: "));
     Serial.println(str);
 #endif
-    if (socket_client->connected())
+    if (socket_.connected())
     {
         sendEncodedData(str, opcode);
     }
 }
 
-void WebSocketClient::sendData(String const& str)
+void WebSocket::sendData(String const& str)
 {
 #ifdef DEBUGGING
     Serial.print(F("Sending data: "));
     Serial.println(str);
 #endif
-    if (socket_client->connected())
+    if (socket_.connected())
     {
         sendEncodedData(str);
     }
 }
 
-int WebSocketClient::timedRead() {
-  while (!socket_client->available()) {
+int WebSocket::timedRead()
+{
+  while (!socket_.available())
+  {
     delay(20);  
   }
 
-  return socket_client->read();
+  return socket_.read();
 }
 
-void WebSocketClient::sendEncodedData(char const* str, Opcode opcode)
+void WebSocket::sendEncodedData(char const* str, Opcode opcode)
 {
+    // TODO: respect the maxFrameSize_
+
     int const size = strlen(str);
 
     // string type
-    socket_client->write(uint8_t(Flag_Fin | opcode));
+    socket_.write(uint8_t(Flag_Fin | opcode));
 
     // NOTE: no support for > 16-bit sized messages
-    if (size > 125) {
-        socket_client->write(126);
-        socket_client->write((uint8_t) (size >> 8));
-        socket_client->write((uint8_t) (size && 0xFF));
-    } else {
-        socket_client->write((uint8_t) size);
+    if (size > 125)
+    {
+        socket_.write(126);
+        socket_.write((uint8_t) (size >> 8));
+        socket_.write((uint8_t) (size && 0xFF));
+    }
+    else
+    {
+        socket_.write((uint8_t) size);
     }
 
-    for (int i=0; i<size; ++i) {
-        socket_client->write(str[i]);
-    }
+    socket_.write(reinterpret_cast<uint8_t const*>(str), size);
 }
 
-void WebSocketClient::sendEncodedData(String const& str)
+void WebSocket::sendEncodedData(String const& str)
 {
     // XXX: String should have c_str() or similar member.
     struct X : String { char const* c_str() const { return buffer; } };

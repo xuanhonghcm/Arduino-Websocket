@@ -5,17 +5,11 @@
 #include <SPI.h>
 #include <Ethernet.h>
 #include <Sha1.h>
-
-// Here we define a maximum framelength to 64 bytes. Default is 256.
-#define MAX_FRAME_LENGTH 64
-
-// Define how many callback functions you have. Default is 1.
-#define CALLBACK_FUNCTIONS 1
-
+  
 #include <WebSocketClient.h>
 
 EthernetClient client;
-websocket::WebSocketClient webSocketClient;
+websocket::WebSocket webSocketClient(client);
 
 
 static void hang()
@@ -23,7 +17,8 @@ static void hang()
   while(true) {}
 }
 
-void setup() {
+void setup()
+{
   
   Serial.begin(115200);
 
@@ -36,8 +31,9 @@ void setup() {
   // This delay is needed to let the WiFly respond properly
   delay(100);
 
+  char const host[] = "192.168.41.112";
   // Connect to the websocket server
-  if (client.connect("192.168.41.112", 80)) {
+  if (client.connect(host, 80)) {
     Serial.println("Connected");
   } else {
     Serial.println("Connection failed.");
@@ -45,16 +41,14 @@ void setup() {
   }
 
   // Handshake with the server
-  webSocketClient.path = "/ws";
-  webSocketClient.host = "auth-service";
-  
-  if (webSocketClient.handshake(client)) {  
+  websocket::ClientHandshake hs(client, host, "/path/to/websocket");
+  if (hs.run() == websocket::Success_Ok) {  
     Serial.println("Handshake successful");
   } else {
     Serial.println("Handshake failed.");  
     hang();// Hang on failure
   }
-  webSocketClient.sendData("{\"door_id\":2}");
+  webSocketClient.sendData("hello");
   client.flush();
 }
 
@@ -64,13 +58,17 @@ void loop()
   {
     Serial.print(".");
     uint8_t response[64] = {0};
-    websocket::WebSocketClient::Result const res = webSocketClient.readFrame(response, sizeof(response));
+    uint8_t frameLength;
+    websocket::Result const res = webSocketClient.readFrame(response, sizeof(response), frameLength);
     switch (res)
     {
     default:
       Serial.print("Failed to get response: "); Serial.println(res);
       break;
-    case websocket::WebSocketClient::Success_Ok:
+    case websocket::Success_MoreFrames:
+      Serial.println("More frames coming!");
+      // no break
+    case websocket::Success_Ok:
       Serial.print("Received data: ");
       Serial.println(reinterpret_cast<char*>(response));
       break;
