@@ -1,12 +1,19 @@
 #ifndef _BASE64_H
 #define _BASE64_H
 
-/* b64_alphabet:
- * 		Description: Base64 alphabet table, a mapping between integers
- * 					 and base64 digits
- * 		Notes: This is an extern here but is defined in Base64.c
- */
-extern const char b64_alphabet[];
+#include <stdint.h>
+
+template <bool>
+struct b64_bool{};
+
+struct b64_sfinae
+{
+	struct static_assert_failed;
+	static static_assert_failed f(...);
+	static int f(b64_bool<true>);
+};
+
+#define B64_STATIC_ASSERT(x) sizeof(b64_sfinae::f(b64_bool<x>()))
 
 /* base64_encode:
  * 		Description:
@@ -22,7 +29,18 @@ extern const char b64_alphabet[];
  * 			2. input must not be null
  * 			3. inputLen must be greater than or equal to 0
  */
-int base64_encode(char *output, char *input, int inputLen);
+uint16_t base64_encode(char* output, char const* input, uint16_t inputLen);
+
+template <typename T, typename U>
+uint16_t base64_encode(T* output, U const* input, uint16_t inputLen)
+{
+    B64_STATIC_ASSERT(sizeof(T) == 1);
+    B64_STATIC_ASSERT(sizeof(U) == 1);
+
+    return base64_encode(reinterpret_cast<char*>(output),
+                         reinterpret_cast<char const*>(input),
+                         inputLen);
+}
 
 /* base64_decode:
  * 		Description:
@@ -40,7 +58,18 @@ int base64_encode(char *output, char *input, int inputLen);
  * 			2. input must not be null
  * 			3. inputLen must be greater than or equal to 0
  */
-int base64_decode(char *output, char *input, int inputLen);
+uint16_t base64_decode(char* output, char const* input, uint16_t inputLen);
+
+template <typename T, typename U>
+uint16_t base64_decode(T* output, U const* input, uint16_t inputLen)
+{
+    B64_STATIC_ASSERT(sizeof(T) == 1);
+    B64_STATIC_ASSERT(sizeof(U) == 1);
+
+    return base64_decode(reinterpret_cast<char*>(output),
+                         reinterpret_cast<char const*>(input),
+                         inputLen);
+}
 
 /* base64_enc_len:
  * 		Description:

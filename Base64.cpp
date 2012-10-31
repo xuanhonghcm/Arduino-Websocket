@@ -1,6 +1,11 @@
 #include "Base64.h"
 
-const char b64_alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+/* b64_alphabet:
+ * 		Description: Base64 alphabet table, a mapping between integers
+ * 					 and base64 digits
+ * 		Notes: This is an extern here but is defined in Base64.c
+ */
+static char const b64_alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		"abcdefghijklmnopqrstuvwxyz"
 		"0123456789+/";
 
@@ -9,9 +14,9 @@ inline void a3_to_a4(unsigned char * a4, unsigned char * a3);
 inline void a4_to_a3(unsigned char * a3, unsigned char * a4);
 inline unsigned char b64_lookup(char c);
 
-int base64_encode(char *output, char *input, int inputLen) {
-	int i = 0, j = 0;
-	int encLen = 0;
+uint16_t base64_encode(char* output, char const* input, uint16_t inputLen) {
+    uint8_t i = 0, j = 0;
+    uint16_t encLen = 0;
 	unsigned char a3[3];
 	unsigned char a4[4];
 
@@ -47,9 +52,9 @@ int base64_encode(char *output, char *input, int inputLen) {
 	return encLen;
 }
 
-int base64_decode(char * output, char * input, int inputLen) {
-	int i = 0, j = 0;
-	int decLen = 0;
+uint16_t base64_decode(char* output, char const* input, uint16_t inputLen) {
+    uint8_t i = 0, j = 0;
+    uint16_t decLen = 0;
 	unsigned char a3[3];
 	unsigned char a4[4];
 
