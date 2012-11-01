@@ -1,21 +1,42 @@
-// 21086 bytes with bundled SHA1
-// 21016 bytes - optimized bundled SHA1
-// 20942 bytes - optimized   
-
 #include <SPI.h>
 #include <Ethernet.h>
 #include <Sha1.h>
   
 #include <WebSocketClient.h>
 
-EthernetClient client;
-websocket::WebSocket webSocketClient(client);
-
-
 static void hang()
 {
   while(true) {}
 }
+
+EthernetClient client;
+class MyWebSocket : public websocket::WebSocket
+{
+public:
+    MyWebSocket(Client& client)
+        : websocket::WebSocket(client)
+    { }
+    
+protected:
+  
+    virtual void onClose()
+    {
+      Serial.println("WebSocket closed");
+      hang();
+    }  
+    
+    virtual void onError(websocket::Result error)
+    {
+      Serial.print("WebSocket error:");Serial.println(error);
+    }
+    
+    virtual void onTextFrame(char const* msg, uint16_t size, bool isLast)
+    {  
+      Serial.print("Got text frame: '");Serial.print(msg);Serial.println("'");
+    }
+};
+MyWebSocket webSocketClient(client);
+
 
 void setup()
 {
@@ -28,12 +49,8 @@ void setup()
   // This is how you get the local IP as an IPAddress object
   Serial.println(Ethernet.localIP());
   
-  // This delay is needed to let the WiFly respond properly
-  delay(100);
-
-  char const host[] = "192.168.41.112";
   // Connect to the websocket server
-  if (client.connect(host, 80)) {
+  if (client.connect("192.168.41.55", 80)) {
     Serial.println("Connected");
   } else {
     Serial.println("Connection failed.");
@@ -41,14 +58,14 @@ void setup()
   }
 
   // Handshake with the server
-  websocket::ClientHandshake hs(client, host, "/path/to/websocket");
+  websocket::ClientHandshake hs(client, "192.168.41.55", "/ws");
   if (hs.run() == websocket::Success_Ok) {  
     Serial.println("Handshake successful");
   } else {
     Serial.println("Handshake failed.");  
     hang();// Hang on failure
   }
-  webSocketClient.sendData("hello");
+  webSocketClient.sendData("{\"door_id\":2}");
   client.flush();
 }
 
@@ -56,31 +73,12 @@ void loop()
 {
   if (client.connected())
   {
-    Serial.print(".");
-    uint8_t response[64] = {0};
-    uint8_t frameLength;
-    websocket::Result const res = webSocketClient.readFrame(response, sizeof(response), frameLength);
-    switch (res)
-    {
-    default:
-      Serial.print("Failed to get response: "); Serial.println(res);
-      break;
-    case websocket::Success_MoreFrames:
-      Serial.println("More frames coming!");
-      // no break
-    case websocket::Success_Ok:
-      Serial.print("Received data: ");
-      Serial.println(reinterpret_cast<char*>(response));
-      break;
-    }
+    webSocketClient.dispatchEvents();
+    delay(1);
   }
   else
-  {  
-    
-    Serial.println("Client disconnected.");
-    hang();// Hang on disconnect
+  {
+    Serial.println("Connection closed.");
+    hang();
   }
-  
-  // wait to fully let the client disconnect
-  delay(3000);
 }
