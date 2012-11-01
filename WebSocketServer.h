@@ -44,73 +44,47 @@ http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 #define WEBSOCKETSERVER_H_
 
 #include <Arduino.h>
-#include <Stream.h>
-#include "String.h"
-#include "Server.h"
+#include <WString.h>
 #include <Client.h>
 
 // CRLF characters to terminate lines/handshakes in headers.
 #define CRLF "\r\n"
 
-// Amount of time (in ms) a user may be connected before getting disconnected 
-// for timing out (i.e. not sending any data to the server).
-#define TIMEOUT_IN_MS 10000
-#define BUFFER_LENGTH 32
+class Client;
 
-// ACTION_SPACE is how many actions are allowed in a program. Defaults to 
-// 5 unless overwritten by user.
-#ifndef CALLBACK_FUNCTIONS
-#define CALLBACK_FUNCTIONS 1
-#endif
+namespace websocket
+{
 
-// Don't allow the client to send big frames of data. This will flood the Arduinos
-// memory and might even crash it.
-#ifndef MAX_FRAME_LENGTH
-#define MAX_FRAME_LENGTH 256
-#endif
+typedef ::Client Socket;
 
-template <typename T, uint16_t N> char (&count_of_helper(T(&)[N]))[N];
-#define SIZE(array) sizeof(count_of_helper(array))
-
-
-class WebSocketServer {
+class ServerHandshake
+{
 public:
 
-    // Handle connection requests to validate and process/refuse
-    // connections.
-    bool handshake(Client &client);
-    
-    // Get data off of the stream
-    String getData();
+    /// @param socket - a connected socket
+    /// @param acceptOrigin - origin that the connctions should be accepted from.
+    ///                       if empty, then any origin will be accepted.
+    ServerHandshake(Socket& socket, String const& acceptOrigin);
 
-    // Write data to the stream
-    void sendData(const char *str);
-    void sendData(String str);
+    // Perform server part of websocket handshake
+    bool run();
 
 private:
-    Client *socket_client;
-    unsigned long _startMillis;
-
-    const char *socket_urlPrefix;
-
-    String origin;
-    String host;
-
     // Discovers if the client's header is requesting an upgrade to a
     // websocket connection.
-    bool analyzeRequest(int bufferLength);
+    bool analyzeRequest();
 
-    String handleStream();    
-    
     // Disconnect user gracefully.
-    void disconnectStream();
-    
-    int timedRead();
+    void disconnect();
 
-    void sendEncodedData(char *str);
-    void sendEncodedData(String str);
+private:
+
+    Socket& socket_;
+    String acceptOrigin_;
+    String origin_;
+    String host_;
 };
 
-
+}
 
 #endif

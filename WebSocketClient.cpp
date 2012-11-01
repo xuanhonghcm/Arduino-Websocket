@@ -1,4 +1,4 @@
-//#define DEBUGGING
+#define DEBUGGING
 
 #include "WebSocketClient.h"
 
@@ -9,6 +9,14 @@
 #include "Sha1.h"
 #include "base64.h"
 
+#define Assert(x) Assert_(#x, x)
+
+static void Assert_(char const*, bool c)
+{
+    // TODO: write entire contents of the RAM to serial.
+    while (!c) {}
+}
+
 using namespace websocket;
 
 ClientHandshake::ClientHandshake(Socket& socket, char const* host, char const* path)
@@ -18,29 +26,6 @@ ClientHandshake::ClientHandshake(Socket& socket, char const* host, char const* p
 { }
 
 Result ClientHandshake::run()
-{
-    // Check request and look for websocket handshake
-    Result const res = analyzeResponse();
-    if (res != Success_Ok)
-    {
-        // Might just need to break until out of socket_client loop.
-#ifdef DEBUGGING
-        Serial.print(F("Invalid handshake: "));
-        Serial.println(res);
-#endif
-        disconnect();
-    }
-    else
-    {
-#ifdef DEBUGGING
-        Serial.println("Websocket established");
-#endif
-    }
-
-    return res;
-}
-
-Result ClientHandshake::analyzeResponse()
 {
     if (!socket_.connected())
     {
@@ -103,6 +88,7 @@ Result ClientHandshake::analyzeResponse()
 
     State state = status_line;
 
+    // TODO: check the HTTP status code. abort if it's not 101 (Switching protocols).
 
     String headerName;
     String headerValue;
@@ -215,177 +201,298 @@ Result ClientHandshake::analyzeResponse()
         : Error_BadHandshake;
 }
 
-void ClientHandshake::disconnect()
+WebSocket::WebSocket(Socket& socket)
+    : socket_(socket)
+    , framePtr_(0)
+    , payloadLength_(0)
+    , payloadRemainingBytes_(0)
+{ }
+
+Result WebSocket::readByte()
+{
+    if (!socket_.connected())
+        return Error_NotConnected;
+
+    int const readResult = socket_.read();
+    if (readResult < 0)
+        return Error_WouldBlock;
+
+    messageBuffer_[framePtr_++] = static_cast<uint8_t>(readResult & 0xFF);
+    return Success_Ok;
+}
+
+Result WebSocket::readFrame()
+{
+    while (true)
+    {
+        if (frameState_ != FrameState_Payload || payloadLength_ != 0)
+        {
+            Result const res = readByte();
+            if (res != Success_Ok)
+            {
+                //Serial.print(res);Serial.print(" ");
+                return error(res);
+            }
+        }
+
+
+        switch (frameState_)
+        {
+        case FrameState_Opcode:
+            Assert(framePtr_ == 1);
+            //Serial.print("Opcode: "); Serial.println(messageBuffer_[0], HEX);
+            if ((messageBuffer_[0] & Flag_Fin) != Flag_Fin)
+            {
+                //Serial.println("Unsupported frame type");
+                // we only support single-frame messages. for now.
+                return error(Error_UnsupportedFrameType);
+            }
+            frameState_ = FrameState_Length;
+            break;
+
+        case FrameState_Length:
+            Assert(framePtr_ == 2);
+            {
+                //Serial.print("Length: "); Serial.println(messageBuffer_[1], HEX);
+                uint8_t const len = messageBuffer_[1] & ~BitMask_Masked;
+                switch (len)
+                {
+                default:
+                    //Serial.println(len);
+                    payloadRemainingBytes_ = len;
+                    payloadLength_ = len;
+                    if (messageBuffer_[1] & BitMask_Masked)
+                        frameState_ = FrameState_Mask;
+                    else
+                        frameState_ = FrameState_Payload;
+                    break;
+                case 126: // following 2 bytes are the length
+                    //Serial.println("2-byte length");
+                    frameState_ = FrameState_Length2;
+                    break;
+                case 127: // following 8 bytes are the length
+                    //Serial.println("8-byte length");
+                    frameState_ = FrameState_Length8;
+                    break;
+                }
+                break;
+            }
+
+        case FrameState_Length2:
+            Assert(2 < framePtr_ && framePtr_ <= 4);
+            if (framePtr_ == 4)
+            {
+                //Serial.println("Length2");
+                uint16_t const len = messageBuffer_[2] << 8 | messageBuffer_[3];
+                if (len > MaxFrameSize)
+                    return error(Error_FrameTooBig);
+
+                payloadRemainingBytes_ = len;
+                payloadLength_ = len;
+
+                if ((messageBuffer_[1] & BitMask_Masked) == BitMask_Masked)
+                    frameState_ = FrameState_Mask;
+                else
+                    frameState_ = FrameState_Payload;
+            }
+            break;
+
+        case FrameState_Length8:
+            Assert(2 < framePtr_ && framePtr_ <= 10);
+            if (framePtr_ == 10)
+            {
+                //Serial.println("Length8");
+                // TODO: see what the real length is.
+                return error(Error_FrameTooBig);
+                if ((messageBuffer_[1] & BitMask_Masked) == BitMask_Masked)
+                    frameState_ = FrameState_Mask;
+                else
+                    frameState_ = FrameState_Payload;
+            }
+            break;
+
+        case FrameState_Mask:
+            if (framePtr_ == 8 || framePtr_ == 14)
+            {
+                //Serial.println("Mask");
+                frameState_ = FrameState_Payload;
+            }
+            break;
+
+        case FrameState_Payload:
+            //Serial.print("Payload"); Serial.println(payloadRemainingBytes_);
+            if (--payloadRemainingBytes_ == 0)
+            {
+                Assert(framePtr_ > payloadLength_);
+
+                uint8_t const* msg = messageBuffer_ + framePtr_ - payloadLength_;
+
+                frameState_ = FrameState_Opcode;
+                framePtr_ = 0;
+
+                switch (messageBuffer_[0] & BitMask_Opcode)
+                {
+                default:
+                    // unsupported frame type
+                    return error(Error_UnsupportedFrameType);
+
+                case Opcode_Text:
+                    onTextFrame(reinterpret_cast<char const*>(msg), payloadLength_, messageBuffer_[0] & Flag_Fin);
+                    break;
+
+                case Opcode_Binary:
+                    onBinaryFrame(msg, payloadLength_, messageBuffer_[0] & Flag_Fin);
+                    break;
+
+                case Opcode_Ping:
+                    onPing(reinterpret_cast<char const*>(msg), payloadLength_);
+                    break;
+
+                case Opcode_Pong:
+                    onPong(reinterpret_cast<char const*>(msg), payloadLength_);
+                    break;
+
+                case Opcode_Close:
+                    disconnect();
+                    return Error_Disconnected;
+                }
+            }
+            break;
+        }
+    }
+
+    Assert(false);
+}
+
+//Result WebSocket::getData(uint8_t* buffer, uint8_t bufferSize)
+//{
+//    // Read frames until error or final frame is received.
+//    while (true)
+//    {
+//        uint8_t frameSize;
+//        switch (Result const r = readFrame(buffer, bufferSize, frameSize))
+//        {
+//        default:
+//            socket_.flush();
+//            return r;
+
+//        case Success_MoreFrames:
+//            buffer += frameSize;
+//            bufferSize -= frameSize;
+//            break;
+//        }
+//    }
+//}
+
+Result WebSocket::sendData(char const* str, Opcode opcode)
+{
+#ifdef DEBUGGING
+    Serial.print(F("Sending data: "));
+    Serial.println(str);
+#endif
+    return sendEncodedData(str, opcode);
+}
+
+Result WebSocket::sendData(String const& str)
+{
+#ifdef DEBUGGING
+    Serial.print(F("Sending data: "));
+    Serial.println(str);
+#endif
+    return sendEncodedData(str);
+}
+
+
+void WebSocket::disconnect()
 {
 #ifdef DEBUGGING
     Serial.println(F("Terminating socket"));
 #endif
     if (socket_.connected())
     {
-        // Should send 0x8700 to server to tell it I'm quitting here.
-        uint8_t const msg[] = { 0x87, 0x00 }; // Flag_Fin | Opcode_? Close?
-                                              // no masking, zero length
+        uint8_t const msg[] = { Flag_Fin | Opcode_Close, 0x00 };
         socket_.write(msg, 2);
         socket_.flush();
+
+        // Give the other end time to terminate the connection.
         delay(10);
+
         socket_.stop();
     }
 }
 
-WebSocket::WebSocket(Socket& socket, uint8_t maxFrameSize)
-    : socket_(socket)
-    , maxFrameSize_(maxFrameSize)
-{ }
+void WebSocket::dispatchEvents()
+{
+    // TODO: allow readFrame to perform only part of its job and continue later
+    // For example when the frame is arriving slowly, get as much data as there
+    // is available and allow other tasks to run.
 
-Result WebSocket::readFrame(uint8_t* buffer, uint8_t bufferSize, uint8_t& frameSize)
+    readFrame();
+}
+
+
+Result WebSocket::sendEncodedData(char const* str, Opcode opcode)
 {
     if (!socket_.connected())
-        return Error_NotConnected;
-
-    uint8_t const msgtype = timedRead();
-    if (!socket_.connected()) return Error_Disconnected;
-    bool const finalFrame = (msgtype & 0x80) == 0x80;
-#ifdef DEBUGGING
-    Serial.print(F("Opcode: ")); Serial.println(msgtype & 0x0F);
-#endif
-
-    int const mask_length = timedRead();
-    if (!socket_.connected()) return Error_Disconnected;
-    bool const hasMask = (mask_length & 0x80) == 0x80;
-    switch (mask_length & 0x7F)
     {
-    default:
-        frameSize = mask_length & 0x7F;
-        break;
-
-    case 126:
-        {
-            // Following 2 bytes are payload length
-            uint16_t length = timedRead() << 8;
-            if (!socket_.connected()) return Error_Disconnected;
-
-            length |= timedRead();
-            if (!socket_.connected()) return Error_Disconnected;
-            if (length > maxFrameSize_) return Error_FrameTooBig;
-            frameSize = length;
-        }
-        break;
-
-    case 127:
-        {
-            // Following 8 bytes are payload length
-            uint64_t x;
-            return Error_FrameTooBig;
-        }
-        break;
-    }
-
-    uint8_t mask[4] = {0};
-    if (hasMask)
-    {
-        // get the mask
-        for (int i = 0; i < 4; ++i)
-        {
-            mask[i] = timedRead();
-            if (!socket_.connected()) return Error_Disconnected;
-        }
-    }
-
-    if (bufferSize < frameSize)
-        return Error_InsufficientBuffer;
-
-    for (int i = 0; i < frameSize; ++i)
-    {
-        buffer[i] = timedRead() ^ mask[i % 4];
-        if (!socket_.connected()) return Error_Disconnected;
-    }
-
-    return finalFrame ? Success_Ok : Success_MoreFrames;
-}
-
-Result WebSocket::getData(uint8_t* buffer, uint8_t bufferSize)
-{
-    // Read frames until error or final frame is received.
-    while (true)
-    {
-        uint8_t frameSize;
-        switch (Result const r = readFrame(buffer, bufferSize, frameSize))
-        {
-        default:
-            socket_.flush();
-            return r;
-
-        case Success_MoreFrames:
-            buffer += frameSize;
-            bufferSize -= frameSize;
-            break;
-        }
-    }
-}
-
-void WebSocket::sendData(char const* str, Opcode opcode)
-{
-#ifdef DEBUGGING
-    Serial.print(F("Sending data: "));
-    Serial.println(str);
-#endif
-    if (socket_.connected())
-    {
-        sendEncodedData(str, opcode);
-    }
-}
-
-void WebSocket::sendData(String const& str)
-{
-#ifdef DEBUGGING
-    Serial.print(F("Sending data: "));
-    Serial.println(str);
-#endif
-    if (socket_.connected())
-    {
-        sendEncodedData(str);
-    }
-}
-
-int WebSocket::timedRead()
-{
-  while (!socket_.available())
-  {
-    delay(20);  
-  }
-
-  return socket_.read();
-}
-
-void WebSocket::sendEncodedData(char const* str, Opcode opcode)
-{
-    // TODO: respect the maxFrameSize_
-
-    int const size = strlen(str);
-
-    // string type
-    socket_.write(uint8_t(Flag_Fin | opcode));
-
-    // NOTE: no support for > 16-bit sized messages
-    if (size > 125)
-    {
-        socket_.write(126);
-        socket_.write((uint8_t) (size >> 8));
-        socket_.write((uint8_t) (size && 0xFF));
+        return error(Error_NotConnected);
     }
     else
     {
-        socket_.write((uint8_t) size);
-    }
+        // TODO: respect the maxFrameSize_
+        // TODO: check that writes succeed.
 
-    socket_.write(reinterpret_cast<uint8_t const*>(str), size);
+        int const size = strlen(str);
+
+        // string type
+        socket_.write(uint8_t(Flag_Fin | opcode));
+
+        // NOTE: no support for > 16-bit sized messages
+        if (size > 125)
+        {
+            socket_.write(126);
+            socket_.write((uint8_t) (size >> 8));
+            socket_.write((uint8_t) (size && 0xFF));
+        }
+        else
+        {
+            socket_.write((uint8_t) size);
+        }
+
+        socket_.write(reinterpret_cast<uint8_t const*>(str), size);
+
+        // XXX: Silently ignore failures
+        return Success_Ok;
+    }
 }
 
-void WebSocket::sendEncodedData(String const& str)
+Result WebSocket::sendEncodedData(String const& str)
 {
     // XXX: String should have c_str() or similar member.
     struct X : String { char const* c_str() const { return buffer; } };
 
     char const* s = static_cast<X const&>(str).c_str();
-    sendEncodedData(s, Opcode_Text);
+    return sendEncodedData(s, Opcode_Text);
+}
+
+Result WebSocket::error(Result err)
+{
+    Assert(err != Success_Ok);
+    Assert(err != Success_MoreFrames);
+
+    switch (err)
+    {
+    default:
+        onError(err);
+        disconnect();
+        break;
+    case Error_WouldBlock:
+        break;
+
+    case Error_Disconnected:
+        onClose();
+        break;
+    }
+
+    return err;
 }

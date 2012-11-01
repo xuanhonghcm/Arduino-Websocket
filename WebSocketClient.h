@@ -63,7 +63,7 @@ enum Opcode
     Opcode_Binary       = 0x02,
     Opcode_Close        = 0x08,
     Opcode_Ping         = 0x09,
-    Opcode_Pong         = 0x0A,
+    Opcode_Pong         = 0x0A
 };
 
 enum Flag
@@ -74,10 +74,20 @@ enum Flag
     Flag_Rsv3 = 0x10,
 };
 
+enum BitMask
+{
+    BitMask_Opcode = 0x0F,
+    BitMask_Flags  = 0xF0,
+    BitMask_Masked = 0x80,
+    BitMask_Length = 0x7F
+};
+
 enum Result
 {
     Success_Ok,
     Success_MoreFrames,
+    Error_WouldBlock,
+    Error_ReadFailed,
     /// Returned when WebSocketClient is ni invalid state for the operation.
     Error_InvalidState,
     /// Returned when socket_client is not connected when operation requires connection.
@@ -86,13 +96,13 @@ enum Result
     Error_Disconnected,
     /// Returned when frame received from server is larger than this lib can handle.
     Error_FrameTooBig,
+    Error_UnsupportedFrameType,
     /// Returned when provided buffer is not sufficient.
     Error_InsufficientBuffer,
     /// Returned when operation times out.
     Error_Timeout,
     /// Server returned invalid value to handshake
     Error_BadHandshake
-
 };
 
 typedef ::Client Socket;
@@ -103,15 +113,10 @@ public:
 
     ClientHandshake(Socket& socket, char const* host, char const* path);
 
+    /// Performs the handshake.
     Result run();
 
 private:
-
-    /// Performs the handshake.
-    Result analyzeResponse();
-
-    /// Sends "close" frame to server and closes the socket.
-    void disconnect();
 
     Socket& socket_;
     char const* const path_;
@@ -122,25 +127,85 @@ class WebSocket
 {
 public:
 
-    explicit WebSocket(Socket& socket, uint8_t maxFrameSize = 64);
-
-    // Get data off of the stream
-    Result getData(uint8_t* buffer, uint8_t bufferSize);
-    Result readFrame(uint8_t *buffer, uint8_t bufferSize, uint8_t& frameSize);
+    static uint8_t const MaxFrameSize = 64;
+    static uint16_t const MaxMessageSize = 64;
+    explicit WebSocket(Socket& socket);
 
     // Write data to the stream
-    void sendData(char const* str, Opcode = Opcode_Text);
-    void sendData(String const& str);
+    Result sendData(char const* str, Opcode = Opcode_Text);
+    Result sendData(String const& str);
+
+    /// Disconnects the websocket. Before closing the socket, sends a "Close" control frame.
+    /// After closing the connection generates onClose event.
+    void disconnect();
+
+    /// Sends a "Ping" control frame.
+    void ping();
+
+    /// Sends a "Pong" control frame.
+    void pong();
+
+    /// This function should be called in loop() function.
+    void dispatchEvents();
+
+protected:
+
+    /// This function is called by websocket when the socket is closed. This could be
+    /// either by server or client.
+    virtual void onClose() {}
+
+    /// This function is called by websocket when an error has been detected.
+    virtual void onError(Result err) { }
+
+    /// This function is called by websocket when a text message is received.
+    virtual void onTextMessage(char const* msg, uint16_t size) {}
+
+    /// This function is called by websocket after a single text frame is received.
+    virtual void onTextFrame(char const* msg, uint16_t size, bool isLast) {}
+
+    /// This function is called by websocket after a whole binary message is received.
+    virtual void onBinaryMessage(uint8_t const* msg, uint16_t size) {}
+
+    /// This function is called by websocket after a single binary frame is received.
+    virtual void onBinaryFrame(uint8_t const* msg, uint8_t size, bool isLast) {}
+
+    /// This function is called by websocket when a ping frame is received.
+    virtual void onPing(char const* payload, uint8_t size) {}
+
+    /// This function is called by websocket when a pong frame is received.
+    virtual void onPong(char const* payload, uint8_t size) {}
+
+private:
+
+    Result sendEncodedData(char const* str, Opcode opcode);
+    Result sendEncodedData(String const& str);
+
+    // Get data off of the stream
+    //Result getData(uint8_t* buffer, uint8_t bufferSize);
+    Result readFrame();
+    Result readByte();
+    Result error(Result);
 
 private:
 
     Socket& socket_;
-    uint8_t const maxFrameSize_;
+    enum FrameState
+    {
+        FrameState_Opcode,
+        FrameState_Length,
+        FrameState_Length2,
+        FrameState_Length8,
+        FrameState_Mask,
+        FrameState_Payload
+    };
+    FrameState frameState_;
 
-    int timedRead();
+    /// Index into frameBuffer_ where next byte of payload is to be written.
+    uint8_t framePtr_;
+    uint8_t payloadLength_;
+    uint8_t payloadRemainingBytes_;
+    uint8_t messageBuffer_[MaxMessageSize];
 
-    void sendEncodedData(char const* str, Opcode opcode);
-    void sendEncodedData(String const& str);
 };
 
 } // namespace websocket
