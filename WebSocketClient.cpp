@@ -1,8 +1,14 @@
-#define DEBUGGING
-
 #include "WebSocketClient.h"
 
-#include <Arduino.h>
+#ifdef WIN32
+#  include <string>
+#  include "workaround.h"
+#include <stdio.h>
+#else
+#  include <Arduino.h>
+#  define DEBUGGING
+#endif
+
 #include <WString.h>
 #include <Client.h>
 //#include <Serial.h>
@@ -21,8 +27,8 @@ using namespace websocket;
 
 ClientHandshake::ClientHandshake(Socket& socket, char const* host, char const* path)
     : socket_(socket)
-    , host_(host)
     , path_(path)
+    , host_(host)
 { }
 
 Result ClientHandshake::run()
@@ -41,7 +47,7 @@ Result ClientHandshake::run()
 
     uint8_t const keySize = 16;
     long keyStart[keySize/sizeof(long)+1] = {0};
-    for (int i = 0; i < countof(keyStart); ++i)
+    for (unsigned i = 0; i < countof(keyStart); ++i)
     {
         keyStart[i] = random();
     }
@@ -74,6 +80,7 @@ Result ClientHandshake::run()
 #ifdef DEBUGGING
         Serial.print(".");
 #endif
+        printf(".");//testing
     }
 
     enum State
@@ -195,6 +202,14 @@ Result ClientHandshake::run()
     Serial.print(F("I calculated:"));
     Serial.println(String(b64Result));
 #endif
+
+#ifdef WIN32 //testing
+    printf(F("  Server key:"));
+    printf(serverKey.c_str());
+    printf(F("\nI calculated:"));
+    printf(String(b64Result).c_str());
+#endif
+
     // if the keys match, good to go
     return serverKey.equals(String(b64Result))
         ? Success_Ok
@@ -468,10 +483,15 @@ Result WebSocket::sendEncodedData(char const* str, Opcode opcode)
 
 Result WebSocket::sendEncodedData(String const& str)
 {
+#ifdef WIN32
+    char const* s = str.c_str();
+#else
     // XXX: String should have c_str() or similar member.
-    struct X : String { char const* c_str() const { return buffer; } };
-
+    struct X : String { char const* c_str() const { return buffer; } };   
     char const* s = static_cast<X const&>(str).c_str();
+#endif
+
+
     return sendEncodedData(s, Opcode_Text);
 }
 

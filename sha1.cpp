@@ -1,6 +1,13 @@
 #include <string.h>
-#include <avr/io.h>
-#include <avr/pgmspace.h>
+#ifdef WIN32
+// WIN32
+#  define PROGMEM
+#  define memcpy_P memcpy
+#else
+#  include <avr/io.h>
+#  include <avr/pgmspace.h>
+#endif
+#include "WString.h"
 #include "sha1.h"
 
 #define SHA1_K0  0x5a827999
@@ -112,6 +119,26 @@ void Sha1::pad()
   addUncounted(byteCount << 3);
 }
 
+void Sha1::update(uint8_t const* data, uint16_t len)
+{
+    for (uint16_t i = 0; i < len; ++i)
+    {
+        write(data[i]);
+    }
+}
+
+void Sha1::update(uint8_t data)
+{
+    write(data);
+}
+
+void Sha1::update(String const& s)
+{
+    for (uint16_t i = 0; i < s.length(); ++i)
+    {
+        write(s[i]);
+    }
+}
 
 void Sha1::finish(uint8_t* out)
 {

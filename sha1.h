@@ -2,7 +2,8 @@
 #define Sha1_h
 
 #include <inttypes.h>
-#include <WString.h>
+
+class String;
 
 class Sha1
 {
@@ -12,26 +13,9 @@ public:
     static uint8_t const BlockLength = 64;
 
     Sha1();
-    void update(uint8_t const* data, uint16_t len)
-    {
-        for (uint16_t i = 0; i < len; ++i)
-        {
-            write(data[i]);
-        }
-    }
-
-    void update(uint8_t data)
-    {
-        write(data);
-    }
-
-    void update(String const& s)
-    {
-        for (uint16_t i = 0; i < s.length(); ++i)
-        {
-            write(s[i]);
-        }
-    }
+    void update(uint8_t const* data, uint16_t len);
+    void update(uint8_t data);
+    void update(String const& s);
 
     void finish(uint8_t* out);
 
