@@ -77,6 +77,9 @@ public:
     // character acccess
     char operator [] (unsigned int index) const;
     char& operator [] (unsigned int index);
+    void getBytes(unsigned char *buf, unsigned int bufsize, unsigned int index=0) const;
+    void toCharArray(char *buf, unsigned int bufsize, unsigned int index=0) const
+        {getBytes((unsigned char *)buf, bufsize, index);}
 
 protected:
     std::string m_string;

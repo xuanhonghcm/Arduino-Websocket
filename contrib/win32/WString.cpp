@@ -54,3 +54,18 @@ unsigned char String::concat(char c)
     return 1;
 }
 
+void String::getBytes(unsigned char *buf, unsigned int bufsize, unsigned int index) const
+{
+    if (!bufsize || !buf) return;
+    if (index >= m_string.length())
+    {
+        buf[0] = 0;
+        return;
+    }
+
+    unsigned int n = bufsize - 1;
+    if (n > m_string.length() - index)
+        n = m_string.length() - index;
+    strncpy((char *)buf, m_string.c_str() + index, n);
+    buf[n] = 0;
+}
