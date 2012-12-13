@@ -3,7 +3,6 @@
 #ifdef WIN32
 #  include <string>
 #  include "workaround.h"
-#include <stdio.h>
 #else
 #  include <Arduino.h>
 #  define DEBUGGING
@@ -80,7 +79,6 @@ Result ClientHandshake::run()
 #ifdef DEBUGGING
         Serial.print(".");
 #endif
-        printf(".");//testing
     }
 
     enum State
@@ -202,14 +200,6 @@ Result ClientHandshake::run()
     Serial.print(F("I calculated:"));
     Serial.println(String(b64Result));
 #endif
-
-#ifdef WIN32 //testing
-    printf(F("  Server key:"));
-    printf(serverKey.c_str());
-    printf(F("\nI calculated:"));
-    printf(String(b64Result).c_str());
-#endif
-
     // if the keys match, good to go
     return serverKey.equals(String(b64Result))
         ? Success_Ok
@@ -490,7 +480,6 @@ Result WebSocket::sendEncodedData(String const& str)
     struct X : String { char const* c_str() const { return buffer; } };   
     char const* s = static_cast<X const&>(str).c_str();
 #endif
-
 
     return sendEncodedData(s, Opcode_Text);
 }
