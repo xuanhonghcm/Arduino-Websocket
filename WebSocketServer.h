@@ -44,8 +44,8 @@ http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75
 #define WEBSOCKETSERVER_H_
 
 #include <Arduino.h>
-#include <WString.h>
 #include <Client.h>
+#include "ws_string.h"
 
 // CRLF characters to terminate lines/handshakes in headers.
 #define CRLF "\r\n"
@@ -54,7 +54,6 @@ class Client;
 
 namespace websocket
 {
-
 typedef ::Client Socket;
 
 class ServerHandshake

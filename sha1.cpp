@@ -126,14 +126,6 @@ void Sha1::update(uint8_t data)
     write(data);
 }
 
-void Sha1::update(String const& s)
-{
-    for (uint16_t i = 0; i < s.length(); ++i)
-    {
-        write(s[i]);
-    }
-}
-
 void Sha1::finish(uint8_t* out)
 {
   // Pad to complete the last block

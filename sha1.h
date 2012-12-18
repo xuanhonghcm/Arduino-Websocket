@@ -2,6 +2,7 @@
 #define Sha1_h
 
 #include <inttypes.h>
+#include <stddef.h>
 
 class String;
 
@@ -15,7 +16,6 @@ public:
     Sha1();
     void update(uint8_t const* data, uint16_t len);
     void update(uint8_t data);
-    void update(String const& s);
 
     void finish(uint8_t* out);
 

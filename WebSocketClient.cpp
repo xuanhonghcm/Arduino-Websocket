@@ -1,18 +1,10 @@
 #include "WebSocketClient.h"
 
-#ifdef WIN32
-#  include <string>
-#  include "workaround.h"
-#else
-#  include <Arduino.h>
-#endif
-
-#include <WString.h>
 #include <Client.h>
-//#include <Serial.h>
 #include "Sha1.h"
 #include "base64.h"
 #include "ws_debug.h"
+#include "ws_string.h"
 
 #define Assert(x) Assert_(#x, x)
 
@@ -23,6 +15,7 @@ static void Assert_(char const*, bool c)
 }
 
 using namespace websocket;
+typedef websocket::String wsString;
 
 ClientHandshake::ClientHandshake(Socket& socket, char const* host, char const* path)
     : socket_(socket)
@@ -89,9 +82,9 @@ Result ClientHandshake::run()
 
     // TODO: check the HTTP status code. abort if it's not 101 (Switching protocols).
 
-    String headerName;
-    String headerValue;
-    String serverKey;
+    wsString headerName;
+    wsString headerValue;
+    wsString serverKey;
     bool foundupgrade = false;
     while (state != end_of_headers)
     {
@@ -115,7 +108,7 @@ Result ClientHandshake::run()
             if ((char)bite == '\n')
             {
                 state = header_name;
-                headerName = String();
+                headerName = wsString();
             }
             break;
         case end_of_header:
@@ -136,7 +129,7 @@ Result ClientHandshake::run()
             else
             {
                 state = header_sep;
-                headerValue = String();
+                headerValue = wsString();
             }
             break;
         case header_sep:
@@ -159,11 +152,11 @@ Result ClientHandshake::run()
                 }
                 else if (headerName.equalsIgnoreCase("sec-websocket-accept"))
                 {
-                    wsDebug() << F("accept found") << headerValue << "\n";
+                    wsDebug() << "accept found" << headerValue << "\n";
                     serverKey = headerValue;
                 }
                 state = end_of_header;
-                headerName = String();
+                headerName = wsString();
             }
             break;
 
@@ -176,8 +169,9 @@ Result ClientHandshake::run()
     }
 
     Sha1 sha;
-    sha.update(b64Key);
-    sha.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+    sha.update(reinterpret_cast<uint8_t*>(b64Key), strlen(b64Key));
+    uint8_t const magic[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    sha.update(magic, sizeof(magic)-1);
 
     uint8_t result[21];
     sha.finish(result);
@@ -190,7 +184,7 @@ Result ClientHandshake::run()
         << F("I calculated:") << b64Result << "\n";
 
     // if the keys match, good to go
-    return serverKey.equals(String(b64Result))
+    return serverKey.equals(wsString(b64Result))
         ? Success_Ok
         : Error_BadHandshake;
 }
@@ -385,14 +379,6 @@ Result WebSocket::sendData(char const* str, Opcode opcode)
     return sendEncodedData(str, opcode);
 }
 
-Result WebSocket::sendData(String const& str)
-{
-    wsDebug() << F("Sending data: ") << str << "\n";
-
-    return sendEncodedData(str);
-}
-
-
 void WebSocket::disconnect()
 {
     wsDebug() << F("Terminating socket\n");
@@ -453,19 +439,6 @@ Result WebSocket::sendEncodedData(char const* str, Opcode opcode)
         // XXX: Silently ignore failures
         return Success_Ok;
     }
-}
-
-Result WebSocket::sendEncodedData(String const& str)
-{
-#ifdef WIN32
-    char const* s = str.c_str();
-#else
-    // XXX: String should have c_str() or similar member.
-    struct X : String { char const* c_str() const { return buffer; } };   
-    char const* s = static_cast<X const&>(str).c_str();
-#endif
-
-    return sendEncodedData(s, Opcode_Text);
 }
 
 Result WebSocket::error(Result err)

@@ -46,7 +46,6 @@ http://tools.ietf.org/html/rfc6455
 #define CRLF "\r\n"
 
 class Client;
-class String;
 
 namespace websocket {
 
@@ -133,7 +132,6 @@ public:
 
     // Write data to the stream
     Result sendData(char const* str, Opcode = Opcode_Text);
-    Result sendData(String const& str);
 
     /// Disconnects the websocket. Before closing the socket, sends a "Close" control frame.
     /// After closing the connection generates onClose event.
@@ -178,7 +176,6 @@ protected:
 private:
 
     Result sendEncodedData(char const* str, Opcode opcode);
-    Result sendEncodedData(String const& str);
 
     // Get data off of the stream
     //Result getData(uint8_t* buffer, uint8_t bufferSize);

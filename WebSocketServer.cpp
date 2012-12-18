@@ -5,8 +5,10 @@
 #include "sha1.h"
 #include "base64.h"
 #include "ws_debug.h"
+#include "ws_string.h"
 
 using namespace websocket;
+typedef websocket::String wsString;
 
 ServerHandshake::ServerHandshake(Socket& socket, String const& acceptOrigin)
     : socket_(socket)
@@ -43,7 +45,7 @@ bool ServerHandshake::analyzeRequest()
     int bite;
     bool foundupgrade = false;
     String oldkey[2];
-    String newkey;
+    wsString newkey;
 
     wsDebug() << F("Analyzing request headers\n");
 
@@ -73,7 +75,7 @@ bool ServerHandshake::analyzeRequest()
             } else if (temp.startsWith("Sec-WebSocket-Key: ")) {
                 newkey=temp.substring(19,temp.length() - 2); // Don't save last CR+LF
             }
-            temp = "";		
+            temp = "";
         }
 
         if (!socket_.available()) {
@@ -94,9 +96,10 @@ bool ServerHandshake::analyzeRequest()
         if (newkey.length() > 0) {
 
             Sha1 sha;
-            sha.update(newkey);
+            sha.update(reinterpret_cast<uint8_t const*>(newkey.c_str()), newkey.length());
             // add the magic string
-            sha.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+            uint8_t const magic[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+            sha.update(magic, sizeof(magic)-1);
 
             uint8_t result[21];
             sha.finish(result);

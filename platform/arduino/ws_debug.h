@@ -1,31 +1,45 @@
 #pragma once
 
+#include <Arduino.h>
+#include <avr/pgmspace.h>
+
 namespace websocket
 {
 	struct Stream
 	{
 	};
 
-	Stream& operator<<(Stream& out, int i)
+	inline Stream& operator<<(Stream& out, int i)
 	{
 		Serial.print(i);
 		return out;
 	}
 
-	Stream& operator<<(Stream& out, char const* s)
+	inline Stream& operator<<(Stream& out, char const* s)
 	{
 		Serial.print(s);
 		return out;
 	}
 
-	Stream& operator<<(Stream& out, ::String const& s)
+	inline Stream& operator<<(Stream& out, char ch)
 	{
-		struct X : String { char const* c_str() const { return buffer; } };   
-		char const* s = static_cast<X const&>(str).c_str();
-		return out << s;
+		Serial.print(ch);
+		return out;
+	}
+
+	inline Stream& operator<<(Stream& out, __FlashStringHelper const* s)
+	{
+		const char PROGMEM *p = (const char PROGMEM *)s;
+		while (unsigned char c = pgm_read_byte(p++))
+		{
+			out << c;
+		}
+		return out;
 	}
 
 	// TODO: overload more operators as needed.
+
+	static Stream debug;
 }
 
-#define debug_stream websocket::Stream()
+#define debug_stream websocket::debug
