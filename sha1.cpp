@@ -1,21 +1,15 @@
-#include <string.h>
-#ifdef WIN32
-// WIN32
-#  define PROGMEM
-#  define memcpy_P memcpy
-#else
-#  include <avr/io.h>
-#  include <avr/pgmspace.h>
-#endif
-#include "WString.h"
 #include "sha1.h"
+#include "ws_progmem.h"
+
+#include <string.h>
+#include <WString.h>
 
 #define SHA1_K0  0x5a827999
 #define SHA1_K20 0x6ed9eba1
 #define SHA1_K40 0x8f1bbcdc
 #define SHA1_K60 0xca62c1d6
 
-static uint8_t const sha1InitState[] PROGMEM = {
+PROGRAM_MEMORY(static uint8_t const sha1InitState[]) = {
   0x01,0x23,0x45,0x67, // H0
   0x89,0xab,0xcd,0xef, // H1
   0xfe,0xdc,0xba,0x98, // H2
@@ -25,7 +19,7 @@ static uint8_t const sha1InitState[] PROGMEM = {
 
 Sha1::Sha1()
 {
-  memcpy_P(state.b, sha1InitState, HashLength);
+  copyFromProgramMemory(state.b, sha1InitState, HashLength);
   byteCount = 0;
   bufferOffset = 0;
 }
