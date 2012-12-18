@@ -5,7 +5,6 @@
 #  include "workaround.h"
 #else
 #  include <Arduino.h>
-#  define DEBUGGING
 #endif
 
 #include <WString.h>
@@ -13,6 +12,7 @@
 //#include <Serial.h>
 #include "Sha1.h"
 #include "base64.h"
+#include "ws_debug.h"
 
 #define Assert(x) Assert_(#x, x)
 
@@ -54,9 +54,7 @@ Result ClientHandshake::run()
     char b64Key[32] = {0};
     base64_encode(b64Key, reinterpret_cast<char*>(keyStart), keySize);
 
-#ifdef DEBUGGING
-    Serial.println(F("Sending websocket upgrade headers"));
-#endif    
+    wsDebug() << F("Sending websocket upgrade headers\n");
 
     socket_.print(F("GET "));
     socket_.print(path_);
@@ -69,16 +67,12 @@ Result ClientHandshake::run()
     socket_.print(b64Key);
     socket_.print(F(CRLF "Sec-WebSocket-Version: 13" CRLF CRLF));
 
-#ifdef DEBUGGING
-    Serial.println(F("Analyzing response headers"));
-#endif    
+    wsDebug() << F("Analyzing response headers\n");
 
     while (socket_.connected() && !socket_.available())
     {
         delay(100);
-#ifdef DEBUGGING
-        Serial.print(".");
-#endif
+        wsDebug() << ".";
     }
 
     enum State
@@ -165,10 +159,7 @@ Result ClientHandshake::run()
                 }
                 else if (headerName.equalsIgnoreCase("sec-websocket-accept"))
                 {
-#ifdef DEBUGGING
-                    Serial.print(F("accept found"));
-                    Serial.println(headerValue);
-#endif
+                    wsDebug() << F("accept found") << headerValue << "\n";
                     serverKey = headerValue;
                 }
                 state = end_of_header;
@@ -194,12 +185,10 @@ Result ClientHandshake::run()
     char b64Result[30];
     base64_encode(b64Result, reinterpret_cast<char*>(result), 20);
 
-#ifdef DEBUGGING
-    Serial.print(F("  Server key:"));
-    Serial.println(serverKey);
-    Serial.print(F("I calculated:"));
-    Serial.println(String(b64Result));
-#endif
+    wsDebug()
+        << F("  Server key:") << serverKey << "\n"
+        << F("I calculated:") << b64Result << "\n";
+
     // if the keys match, good to go
     return serverKey.equals(String(b64Result))
         ? Success_Ok
@@ -391,28 +380,23 @@ Result WebSocket::readFrame()
 
 Result WebSocket::sendData(char const* str, Opcode opcode)
 {
-#ifdef DEBUGGING
-    Serial.print(F("Sending data: "));
-    Serial.println(str);
-#endif
+    wsDebug() << F("Sending data: ") << str << "\n";
+
     return sendEncodedData(str, opcode);
 }
 
 Result WebSocket::sendData(String const& str)
 {
-#ifdef DEBUGGING
-    Serial.print(F("Sending data: "));
-    Serial.println(str);
-#endif
+    wsDebug() << F("Sending data: ") << str << "\n";
+
     return sendEncodedData(str);
 }
 
 
 void WebSocket::disconnect()
 {
-#ifdef DEBUGGING
-    Serial.println(F("Terminating socket"));
-#endif
+    wsDebug() << F("Terminating socket\n");
+
     if (socket_.connected())
     {
         uint8_t const msg[] = { Flag_Fin | Opcode_Close, 0x00 };

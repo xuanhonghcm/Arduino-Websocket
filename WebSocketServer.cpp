@@ -4,6 +4,7 @@
 
 #include "sha1.h"
 #include "base64.h"
+#include "ws_debug.h"
 
 using namespace websocket;
 
@@ -17,21 +18,14 @@ bool ServerHandshake::run()
     // If there is a connected client->
     if (socket_.connected()) {
         // Check request and look for websocket handshake
-#ifdef DEBUGGING
-            Serial.println(F("Client connected"));
-#endif
+        wsDebug() << F("Client connected\n");
         if (analyzeRequest()) {
-#ifdef DEBUGGING
-                Serial.println(F("Websocket established"));
-#endif
-
+                wsDebug() << F("Websocket established\n");
                 return true;
 
         } else {
             // Might just need to break until out of socket_ loop.
-#ifdef DEBUGGING
-            Serial.println(F("Disconnecting client"));
-#endif
+            wsDebug() << F("Disconnecting client\n");
             disconnect();
 
             return false;
@@ -51,9 +45,7 @@ bool ServerHandshake::analyzeRequest()
     String oldkey[2];
     String newkey;
 
-#ifdef DEBUGGING
-    Serial.println(F("Analyzing request headers"));
-#endif
+    wsDebug() << F("Analyzing request headers\n");
 
     // TODO: More robust string extraction
     while ((bite = socket_.read()) != -1) {
@@ -61,9 +53,8 @@ bool ServerHandshake::analyzeRequest()
         temp += (char)bite;
 
         if ((char)bite == '\n') {
-#ifdef DEBUGGING
-            Serial.print("Got Line: " + temp);
-#endif
+            wsDebug() << "Got Line: " << temp << "\n";
+
             // TODO: Should ignore case when comparing and allow 0-n whitespace after ':'. See the spec:
             // http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html
             if (!foundupgrade && temp.startsWith("Upgrade: WebSocket")) {
@@ -127,18 +118,14 @@ bool ServerHandshake::analyzeRequest()
         }
     } else {
         // Nope, failed handshake. Disconnect
-#ifdef DEBUGGING
-        Serial.println(F("Header mismatch"));
-#endif
+        wsDebug() << F("Header mismatch\n");
         return false;
     }
 }
 
 void ServerHandshake::disconnect()
 {
-#ifdef DEBUGGING
-    Serial.println(F("Terminating socket"));
-#endif
+    wsDebug() << F("Terminating socket\n");
 
     // Should send 0x8700 to server to tell it I'm quitting here.
     socket_.write((uint8_t) 0x87);
