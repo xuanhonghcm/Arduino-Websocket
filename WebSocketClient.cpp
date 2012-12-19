@@ -5,6 +5,8 @@
 #include "base64.h"
 #include "ws_debug.h"
 #include "ws_string.h"
+#include "ws_timer.h"
+#include "ws_random.h"
 
 #define Assert(x) Assert_(#x, x)
 
@@ -15,7 +17,7 @@ static void Assert_(char const*, bool c)
 }
 
 using namespace websocket;
-typedef websocket::String wsString;
+namespace ws = websocket;
 
 ClientHandshake::ClientHandshake(Socket& socket, char const* host, char const* path)
     : socket_(socket)
@@ -33,7 +35,7 @@ Result ClientHandshake::run()
     static bool seeded = false;
     if (!seeded)
     {
-        randomSeed(analogRead(0));
+        ws::randomSeed();
         seeded = true;
     }
 
@@ -41,7 +43,7 @@ Result ClientHandshake::run()
     long keyStart[keySize/sizeof(long)+1] = {0};
     for (unsigned i = 0; i < countof(keyStart); ++i)
     {
-        keyStart[i] = random();
+        keyStart[i] = ws::random();
     }
 
     char b64Key[32] = {0};
@@ -64,7 +66,7 @@ Result ClientHandshake::run()
 
     while (socket_.connected() && !socket_.available())
     {
-        delay(100);
+        ws::delay(100);
         wsDebug() << ".";
     }
 
@@ -82,9 +84,9 @@ Result ClientHandshake::run()
 
     // TODO: check the HTTP status code. abort if it's not 101 (Switching protocols).
 
-    wsString headerName;
-    wsString headerValue;
-    wsString serverKey;
+    ws::String headerName;
+    ws::String headerValue;
+    ws::String serverKey;
     bool foundupgrade = false;
     while (state != end_of_headers)
     {
@@ -97,7 +99,7 @@ Result ClientHandshake::run()
             }
             else
             {
-                delay(10);
+                ws::delay(10);
                 continue;
             }
         }
@@ -108,7 +110,7 @@ Result ClientHandshake::run()
             if ((char)bite == '\n')
             {
                 state = header_name;
-                headerName = wsString();
+                headerName = ws::String();
             }
             break;
         case end_of_header:
@@ -129,7 +131,7 @@ Result ClientHandshake::run()
             else
             {
                 state = header_sep;
-                headerValue = wsString();
+                headerValue = ws::String();
             }
             break;
         case header_sep:
@@ -156,7 +158,7 @@ Result ClientHandshake::run()
                     serverKey = headerValue;
                 }
                 state = end_of_header;
-                headerName = wsString();
+                headerName = ws::String();
             }
             break;
 
@@ -164,7 +166,7 @@ Result ClientHandshake::run()
 
         if (!socket_.available())
         {
-          delay(20);
+          ws::delay(20);
         }
     }
 
@@ -184,7 +186,7 @@ Result ClientHandshake::run()
         << F("I calculated:") << b64Result << "\n";
 
     // if the keys match, good to go
-    return serverKey.equals(wsString(b64Result))
+    return serverKey.equals(ws::String(b64Result))
         ? Success_Ok
         : Error_BadHandshake;
 }
@@ -390,7 +392,7 @@ void WebSocket::disconnect()
         socket_.flush();
 
         // Give the other end time to terminate the connection.
-        delay(10);
+        ws::delay(10);
 
         socket_.stop();
     }
