@@ -40,12 +40,11 @@ http://tools.ietf.org/html/rfc6455
 #ifndef WEBSOCKETCLIENT_H_
 #define WEBSOCKETCLIENT_H_
 
+#include "ws_socket.h"
 #include <stdint.h>
 
 // CRLF characters to terminate lines/handshakes in headers.
 #define CRLF "\r\n"
-
-class Client;
 
 namespace websocket {
 
@@ -103,8 +102,6 @@ enum Result
     /// Server returned invalid value to handshake
     Error_BadHandshake
 };
-
-typedef ::Client Socket;
 
 class ClientHandshake
 {
