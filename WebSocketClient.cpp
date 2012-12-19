@@ -1,12 +1,12 @@
 #include "WebSocketClient.h"
 
-#include <Client.h>
 #include "Sha1.h"
 #include "base64.h"
 #include "ws_debug.h"
 #include "ws_string.h"
 #include "ws_timer.h"
 #include "ws_random.h"
+#include "ws_progmem.h"
 
 #define Assert(x) Assert_(#x, x)
 
@@ -122,6 +122,9 @@ Result ClientHandshake::run()
         case header_name:
             if ((char)bite == '\r' || (char)bite == '\n')
             {
+                // Read the remainder of CRLF.
+                socket_.read();
+
                 state = end_of_headers;
             }
             else if ((char)bite != ':')
