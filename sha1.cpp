@@ -1,8 +1,6 @@
 #include "sha1.h"
 #include "ws_progmem.h"
-
 #include <string.h>
-#include <WString.h>
 
 #define SHA1_K0  0x5a827999
 #define SHA1_K20 0x6ed9eba1
