@@ -5,8 +5,8 @@
 
 namespace websocket
 {
-	void delay(uint32_t ms)
-	{
-		::Sleep(ms);
-	}
+    void delay(uint32_t ms)
+    {
+        ::Sleep(ms);
+    }
 }

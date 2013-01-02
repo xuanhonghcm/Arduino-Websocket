@@ -5,6 +5,6 @@
 
 namespace websocket
 {
-	typedef std::ostream Stream;
+    typedef std::ostream Stream;
 }
 

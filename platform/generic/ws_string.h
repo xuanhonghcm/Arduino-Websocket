@@ -47,7 +47,7 @@ namespace websocket
             return *this;
         }
 
-	// Performs a lexicographical compare, return value similar to that of strcmp.
+        // Performs a lexicographical compare, return value similar to that of strcmp.
         int compareTo(String const& s) const;
 
         bool equals(String const& s) const { return m_string == s.m_string; }

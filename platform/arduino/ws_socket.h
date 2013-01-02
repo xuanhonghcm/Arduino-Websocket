@@ -4,5 +4,5 @@
 
 namespace websocket
 {
-	typedef ::Client Socket;
+    typedef ::Client Socket;
 }
