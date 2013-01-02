@@ -135,7 +135,7 @@ namespace websocket
         {
             char buf[16];
             sprintf(buf, "%d", n);
-            print(buf);
+            return print(buf);
         }
 
 		/// Write a single byte to the socket.
