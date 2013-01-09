@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <limits.h>
 
 namespace websocket
 {
@@ -9,5 +10,8 @@ namespace websocket
         ::randomSeed(analogRead(0));
     }
 
-    using ::random;
+    inline long random()
+    {
+        return ::random(LONG_MIN, LONG_MAX);
+    }
 }
