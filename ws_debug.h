@@ -10,4 +10,4 @@
 	#define WEBSOCKET_DEBUG 0
 #endif
 
-#define wsDebug() if (WEBSOCKET_DEBUG) debug_stream
+#define wsDebug() if (!WEBSOCKET_DEBUG) {} else debug_stream
