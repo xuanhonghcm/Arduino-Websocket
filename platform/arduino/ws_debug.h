@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <avr/pgmspace.h>
+#include "ws_progmem.h"
 
 namespace websocket
 {
@@ -29,8 +29,8 @@ namespace websocket
 
     inline Stream& operator<<(Stream& out, __FlashStringHelper const* s)
     {
-        const char PROGMEM *p = (const char PROGMEM *)s;
-        while (unsigned char c = pgm_read_byte(p++))
+        PROGRAM_MEMORY(const char)* p = reinterpret_cast<PROGRAM_MEMORY(const char)*>(s);
+        while (unsigned char c = readByteFromProgramMemory(p++))
         {
             out << c;
         }
