@@ -19,13 +19,7 @@ static void Assert_(char const*, bool c)
 using namespace websocket;
 namespace ws = websocket;
 
-ClientHandshake::ClientHandshake(Socket& socket, char const* host, char const* path)
-    : socket_(socket)
-    , path_(path)
-    , host_(host)
-{ }
-
-Result ClientHandshake::run()
+ws::Result ws::clientHandshake(Socket& socket_, char const* host_, char const* path_)
 {
     if (!socket_.connected())
     {

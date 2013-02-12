@@ -103,21 +103,8 @@ enum Result
     Error_BadHandshake
 };
 
-class ClientHandshake
-{
-public:
-
-    ClientHandshake(Socket& socket, char const* host, char const* path);
-
-    /// Performs the handshake.
-    Result run();
-
-private:
-
-    Socket& socket_;
-    char const* const path_;
-    char const* const host_;
-};
+/// Performs the client part of the handshake.
+Result clientHandshake(Socket& socket, char const* host, char const* path);
 
 class WebSocket
 {
