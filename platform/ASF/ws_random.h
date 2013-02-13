@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdlib.h>
-
 extern "C" unsigned long hardclock();   // returns random value from true random number generator
 
 namespace websocket
