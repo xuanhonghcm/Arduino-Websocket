@@ -183,7 +183,7 @@ ws::Result ws::clientHandshake(Socket& socket_, char const* host_, char const* p
         << F("I calculated:") << b64Result << "\n";
 
     // if the keys match, good to go
-    return serverKey.equals(ws::String(b64Result))
+    return (serverKey == b64Result)
         ? Success_Ok
         : Error_BadHandshake;
 }
