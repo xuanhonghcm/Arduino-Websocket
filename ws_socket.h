@@ -5,5 +5,5 @@
 #elif defined(_WIN32)
 	#include "platform/win32/ws_socket.h"
 #else
-	#error "unsupported platform"
+	#include "platform/generic/ws_socket.h"
 #endif
