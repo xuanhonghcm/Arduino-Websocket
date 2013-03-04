@@ -1,6 +1,6 @@
 #include <SPI.h>
 #include <Ethernet.h>
-#include <Sha1.h>
+#include <sha1.h>
   
 #include <WebSocketClient.h>
 
