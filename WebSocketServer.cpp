@@ -18,7 +18,7 @@
 #include "WebSocketServer.h"
 
 #include "sha1.h"
-#include "base64.h"
+#include "Base64.h"
 #include "ws_debug.h"
 #include "ws_string.h"
 

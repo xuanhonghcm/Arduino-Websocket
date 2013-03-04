@@ -17,7 +17,7 @@
 */
 #pragma once
 
-#include "Wstring.h"
+#include "WString.h"
 #include "ws_debug.h"
 
 namespace websocket
