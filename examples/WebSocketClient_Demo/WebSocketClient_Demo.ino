@@ -58,7 +58,7 @@ void setup()
   }
 
   // Handshake with the server
-  if (clientHandshake(client, "192.168.41.55", "/ws") == websocket::Success_Ok) {  
+  if (websocket::clientHandshake(client, "192.168.41.55", "/ws") == websocket::Success_Ok) {  
     Serial.println("Handshake successful");
   } else {
     Serial.println("Handshake failed.");  
